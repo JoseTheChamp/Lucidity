@@ -1,0 +1,127 @@
+@page "/cues"
+@implements IDisposable
+@inject NavigationManager Nav
+@inject ICueProfileService Profiles
+@inject ICueSchedulerService Scheduler
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <div>
+            <span class="subtitle">Audio Cues</span>
+            <h1>Cues</h1>
+        </div>
+    </header>
+
+    <div class="settings-list">
+        @if (_activeProfile is not null)
+        {
+            <div class="card" style="border-color:rgba(167,139,250,0.4);background:linear-gradient(180deg,rgba(167,139,250,0.10),rgba(19,24,41,0.85))">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:10px;height:10px;border-radius:50%;background:var(--lavender);box-shadow:0 0 12px var(--lavender);animation:breathe 2.4s ease-in-out infinite"></div>
+                    <div style="flex:1">
+                        <div class="label-meta">Active profile</div>
+                        <div style="font-size:var(--fs-title);font-weight:500;margin-top:2px">@_activeProfile.Name</div>
+                    </div>
+                    <span class="pill">@_activeProfile.Cues.Count cues</span>
+                </div>
+                @if (_upcoming.Count > 0)
+                {
+                    <div class="divider" style="margin:12px 0"></div>
+                    <div class="label-meta" style="margin-bottom:8px">Next up</div>
+                    @foreach (var log in _upcoming.Take(3))
+                    {
+                        <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-sec);padding:3px 0">
+                            <span>@log.CueLabel</span>
+                            <span class="mono">@log.ScheduledFor.ToLocalTime().ToString("ddd HH:mm")</span>
+                        </div>
+                    }
+                }
+                <div class="divider" style="margin:12px 0"></div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-warn" style="flex:1" @onclick="Deactivate">Deactivate</button>
+                    <button class="btn" style="flex:1" @onclick='() => Nav.NavigateTo("/cues/profiles")'>Switch profile</button>
+                </div>
+            </div>
+        }
+
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/cues/profiles")'>
+            <span class="label">Cue profiles</span>
+            <span class="meta">@_profileCount profile@(_profileCount == 1 ? "" : "s")</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/cues/audio")'>
+            <span class="label">Audio library</span>
+            <span class="meta">Bundled · imports · recordings</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/dev/audio")'>
+            <span class="label">Audio sandbox <span class="pill">dev</span></span>
+            <span class="meta">Test playback</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+
+        @if (_recent.Count > 0)
+        {
+            <div class="month-header">
+                <span class="label-meta">Last night's cues</span>
+                <div class="rule"></div>
+                <span class="count">@_recent.Count(l => l.Status == CueLogStatus.Fired)/@_recent.Count</span>
+            </div>
+            @foreach (var log in _recent.Take(12))
+            {
+                <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(26,32,56,0.35);border:1px solid var(--border);border-radius:10px">
+                    <span style="width:8px;height:8px;border-radius:50%;background:@StatusColor(log.Status)"></span>
+                    <span style="flex:1;font-size:13px">@log.CueLabel</span>
+                    <span class="mono" style="font-size:11px;color:var(--text-ter)">@log.ScheduledFor.ToLocalTime().ToString("MMM d HH:mm")</span>
+                    <span class="label-meta">@(log.Status ?? "—")</span>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private CueProfile? _activeProfile;
+    private int _profileCount;
+    private List<ScheduledCueLog> _upcoming = new();
+    private List<ScheduledCueLog> _recent = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Scheduler.ActiveProfileChanged += OnChanged;
+        Profiles.Changed += OnChanged;
+        await Reload();
+    }
+
+    private async void OnChanged() => await InvokeAsync(async () => { await Reload(); StateHasChanged(); });
+
+    private async Task Reload()
+    {
+        var all = await Profiles.ListAsync();
+        _profileCount = all.Count;
+        var activeId = await Scheduler.GetActiveProfileIdAsync();
+        _activeProfile = activeId is null ? null : all.FirstOrDefault(p => p.Id == activeId);
+        _upcoming = (await Scheduler.GetUpcomingAsync()).ToList();
+        _recent = (await Scheduler.GetRecentAsync(24)).ToList();
+    }
+
+    private async Task Deactivate()
+    {
+        await Scheduler.DeactivateAsync();
+        await Reload();
+    }
+
+    private static string StatusColor(string? status) => status switch
+    {
+        CueLogStatus.Fired => "var(--lucid)",
+        CueLogStatus.Failed => "var(--warn)",
+        CueLogStatus.Scheduled => "var(--accent)",
+        _ => "var(--text-quat)",
+    };
+
+    public void Dispose()
+    {
+        Scheduler.ActiveProfileChanged -= OnChanged;
+        Profiles.Changed -= OnChanged;
+    }
+}

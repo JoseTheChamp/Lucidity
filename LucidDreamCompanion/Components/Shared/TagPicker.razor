@@ -1,0 +1,117 @@
+@using LucidDreamCompanion.Data.Entities
+@using LucidDreamCompanion.Services
+@inject ITagService TagService
+
+<div class="picker-row">
+    @foreach (var t in _allTags)
+    {
+        var active = _selected.Contains(t.Id);
+        <TagChip Tag="t" Active="active" OnClick="() => Toggle(t.Id)" />
+    }
+    @if (_creating)
+    {
+        <input class="input" style="width:140px;font-size:12px;padding:4px 10px"
+               placeholder="new tag"
+               @bind="_newTagName"
+               @bind:event="oninput"
+               @onkeydown="OnNewTagKey"
+               @ref="_newTagInput" />
+    }
+    else
+    {
+        <button type="button" class="chip chip-clickable"
+                style="color:var(--accent);border-color:var(--accent);background:var(--accent-soft)"
+                @onclick="StartCreate">
+            + new
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyCollection<int> SelectedIds { get; set; } = Array.Empty<int>();
+    [Parameter] public EventCallback<IReadOnlyList<int>> SelectedIdsChanged { get; set; }
+
+    private List<Tag> _allTags = new();
+    private HashSet<int> _selected = new();
+    private bool _creating;
+    private string _newTagName = "";
+    private ElementReference _newTagInput;
+    private bool _focusOnNext;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Reload();
+        TagService.Changed += OnTagsChanged;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _selected = new HashSet<int>(SelectedIds);
+    }
+
+    private async void OnTagsChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await Reload();
+            StateHasChanged();
+        });
+    }
+
+    private async Task Reload()
+    {
+        var list = await TagService.ListAsync();
+        _allTags = list.ToList();
+    }
+
+    private async Task Toggle(int id)
+    {
+        if (!_selected.Add(id)) _selected.Remove(id);
+        await SelectedIdsChanged.InvokeAsync(_selected.ToList());
+    }
+
+    private void StartCreate()
+    {
+        _creating = true;
+        _newTagName = "";
+        _focusOnNext = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusOnNext)
+        {
+            _focusOnNext = false;
+            try { await _newTagInput.FocusAsync(); } catch { }
+        }
+    }
+
+    private async Task OnNewTagKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newTagName))
+        {
+            var color = PickColor();
+            var t = await TagService.CreateAsync(_newTagName, color);
+            await Reload();
+            _selected.Add(t.Id);
+            await SelectedIdsChanged.InvokeAsync(_selected.ToList());
+            _newTagName = "";
+            _creating = false;
+        }
+        else if (e.Key == "Escape")
+        {
+            _creating = false;
+        }
+    }
+
+    private string PickColor()
+    {
+        var palette = new[] { "#6B8AFF", "#5EEAD4", "#A78BFA", "#F472B6", "#FBBF24", "#60A5FA", "#34D399" };
+        return palette[Random.Shared.Next(palette.Length)];
+    }
+
+    public void Dispose()
+    {
+        TagService.Changed -= OnTagsChanged;
+    }
+}

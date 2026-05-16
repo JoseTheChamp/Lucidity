@@ -1,0 +1,223 @@
+@page "/cues/profiles/{Id:int}"
+@implements IDisposable
+@inject ICueProfileService Profiles
+@inject ICueSchedulerService Scheduler
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/cues/profiles")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Cue profile</span>
+            <h1 style="font-size:22px">@(_profile?.Name ?? "…")</h1>
+        </div>
+    </header>
+
+    @if (_profile is null)
+    {
+        <div class="empty"><div class="title">Profile not found</div></div>
+    }
+    else
+    {
+        <div class="settings-list">
+            @if (_profile.IsTechniqueTemplate)
+            {
+                <div class="card" style="border-color:rgba(167,139,250,0.3);background:rgba(167,139,250,0.06)">
+                    <div style="color:var(--lavender);font-size:13px">This is a locked technique template. Duplicate it to make an editable copy.</div>
+                </div>
+            }
+
+            <div class="field">
+                <span class="field-label">Name</span>
+                <input class="input" @bind="_name" disabled="@_profile.IsTechniqueTemplate" />
+            </div>
+            <div class="field">
+                <span class="field-label">Description</span>
+                <input class="input" @bind="_description" placeholder="optional" disabled="@_profile.IsTechniqueTemplate" />
+            </div>
+            @if (!_profile.IsTechniqueTemplate)
+            {
+                <button class="btn" @onclick="SaveMeta">Save name &amp; description</button>
+            }
+
+            <div class="month-header">
+                <span class="label-meta">Cues</span>
+                <div class="rule"></div>
+                <span class="count">@_profile.Cues.Count</span>
+            </div>
+
+            @if (_profile.Cues.Count == 0)
+            {
+                <div style="color:var(--text-ter);font-size:13px;padding:4px 4px 8px">No cues yet. Add one below.</div>
+            }
+            else
+            {
+                @foreach (var (cue, idx) in _profile.Cues.Select((c, i) => (c, i)))
+                {
+                    <div class="card" style="padding:14px">
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <div style="flex:1;min-width:0;cursor:pointer" @onclick="() => EditCue(cue.Id)">
+                                <div style="display:flex;align-items:center;gap:8px">
+                                    <span style="font-size:14px;font-weight:500">@(string.IsNullOrWhiteSpace(cue.Label) ? "Untitled cue" : cue.Label)</span>
+                                    @if (!cue.Enabled)
+                                    {
+                                        <span class="pill">off</span>
+                                    }
+                                </div>
+                                <div class="mono" style="font-size:11px;color:var(--text-ter);margin-top:4px">@DescribeCue(cue)</div>
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:2px">
+                                <button class="btn btn-ghost" style="padding:2px 8px" disabled="@(idx == 0)" @onclick="() => Move(cue.Id, -1)" aria-label="Up">▲</button>
+                                <button class="btn btn-ghost" style="padding:2px 8px" disabled="@(idx == _profile.Cues.Count - 1)" @onclick="() => Move(cue.Id, 1)" aria-label="Down">▼</button>
+                            </div>
+                            <button class="btn btn-ghost" style="padding:8px 10px" @onclick="() => DeleteCue(cue)" aria-label="Delete">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+
+            <button class="btn" @onclick="AddCue">+ Add cue</button>
+
+            <div class="divider" style="margin:8px 0"></div>
+
+            @if (_isActive)
+            {
+                <button class="btn btn-warn" @onclick="Deactivate">Deactivate cues</button>
+            }
+            else
+            {
+                <button class="btn btn-primary" @onclick="Activate">Activate tonight</button>
+            }
+            @if (!string.IsNullOrEmpty(_status))
+            {
+                <div class="label-meta" style="text-align:center">@_status</div>
+            }
+        </div>
+    }
+</div>
+
+<ConfirmDialog @ref="_confirm" />
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private CueProfile? _profile;
+    private string _name = "";
+    private string _description = "";
+    private bool _isActive;
+    private ConfirmDialog? _confirm;
+    private string _status = "";
+
+    protected override void OnInitialized()
+    {
+        Profiles.Changed += OnChanged;
+        Scheduler.ActiveProfileChanged += OnChanged;
+    }
+
+    protected override async Task OnParametersSetAsync() => await Reload();
+
+    private async void OnChanged() => await InvokeAsync(async () => { await Reload(); StateHasChanged(); });
+
+    private async Task Reload()
+    {
+        _profile = await Profiles.GetAsync(Id);
+        if (_profile is not null)
+        {
+            _name = _profile.Name;
+            _description = _profile.Description ?? "";
+        }
+        _isActive = (await Scheduler.GetActiveProfileIdAsync()) == Id;
+    }
+
+    private async Task SaveMeta()
+    {
+        await Profiles.RenameAsync(Id, _name, _description);
+        _status = "Saved";
+    }
+
+    private void EditCue(int cueId) => Nav.NavigateTo($"/cues/profiles/{Id}/cue/{cueId}");
+
+    private async Task AddCue()
+    {
+        var cue = await Profiles.AddCueAsync(Id);
+        Nav.NavigateTo($"/cues/profiles/{Id}/cue/{cue.Id}");
+    }
+
+    private async Task Move(int cueId, int dir) => await Profiles.MoveCueAsync(cueId, dir);
+
+    private async Task DeleteCue(AudioCue cue)
+    {
+        if (_confirm is null) return;
+        var ok = await _confirm.ShowAsync("Delete cue?", $"\"{cue.Label}\" will be removed from this profile.", "Delete");
+        if (!ok) return;
+        await Profiles.DeleteCueAsync(cue.Id);
+    }
+
+    private async Task Activate()
+    {
+        if (_confirm is null || _profile is null) return;
+
+        if (!Scheduler.ExactAlarmsAllowed)
+        {
+            var go = await _confirm.ShowAsync(
+                "Allow exact alarms",
+                "Android needs permission to fire cues at exact times. Open settings to allow it?",
+                "Open settings", "Later", destructive: false);
+            if (go) Scheduler.RequestExactAlarmPermission();
+            return;
+        }
+        if (!Scheduler.BatteryOptimizationIgnored)
+        {
+            var go = await _confirm.ShowAsync(
+                "Battery optimization",
+                "To fire cues reliably overnight, exempt this app from battery optimization. Open settings?",
+                "Open settings", "Skip", destructive: false);
+            if (go)
+            {
+                Scheduler.RequestBatteryExemption();
+                return;
+            }
+        }
+
+        var confirm = await _confirm.ShowAsync(
+            "Activate tonight?",
+            $"\"{_profile.Name}\" will arm its cues and start the overnight monitor.",
+            "Activate", destructive: false);
+        if (!confirm) return;
+
+        await Scheduler.ActivateProfileAsync(Id, DateTime.UtcNow);
+        _status = "Armed for tonight";
+    }
+
+    private async Task Deactivate()
+    {
+        await Scheduler.DeactivateAsync();
+        _status = "Deactivated";
+    }
+
+    private static string DescribeCue(AudioCue c)
+    {
+        var trigger = c.TriggerMode switch
+        {
+            CueTriggerMode.ClockBased => c.ClockTime is { } t ? $"At {t:HH:mm}" : "Clock (unset)",
+            CueTriggerMode.Interval => c.IntervalStart is { } s && c.IntervalEnd is { } e
+                ? $"Every {(int)(c.IntervalEvery?.TotalMinutes ?? 0)}m · {s:HH:mm}–{e:HH:mm}"
+                : "Interval (unset)",
+            CueTriggerMode.SleepRelative => c.OffsetFromSleepStart is { } o
+                ? $"Sleep +{(int)o.TotalHours}h{o.Minutes:D2}m (Phase 5)"
+                : "Sleep-relative (Phase 5)",
+            _ => "—"
+        };
+        return $"{trigger} · {c.AudioAsset?.DisplayName ?? "no audio"} · {c.VolumePercent}%";
+    }
+
+    public void Dispose()
+    {
+        Profiles.Changed -= OnChanged;
+        Scheduler.ActiveProfileChanged -= OnChanged;
+    }
+}

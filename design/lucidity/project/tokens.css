@@ -1,0 +1,232 @@
+/* ---------- Lucid Dream Companion — tokens ---------- */
+:root {
+  /* Surfaces */
+  --bg-0: #000000;
+  --bg-1: #0A0E1A;
+  --surface: #131829;
+  --surface-2: #1A2038;
+  --border: #1F2538;
+  --border-2: #262D45;
+
+  /* Text */
+  --text-pri: #E8ECF4;
+  --text-sec: #8B92A8;
+  --text-ter: #5A6478;
+  --text-quat: #3A4258;
+
+  /* Accents (tweakable; default cool moonlight blue) */
+  --accent: #6B8AFF;
+  --accent-soft: rgba(107, 138, 255, 0.14);
+  --accent-glow: rgba(107, 138, 255, 0.35);
+
+  /* Semantic */
+  --lavender: #A78BFA;
+  --lucid: #5EEAD4;
+  --lucid-soft: rgba(94, 234, 212, 0.14);
+  --warn: #F87171;
+  --warn-soft: rgba(248, 113, 113, 0.14);
+
+  /* Density (overridden by .compact) */
+  --pad-x: 20px;
+  --pad-y: 16px;
+  --gap: 16px;
+  --gap-sm: 10px;
+  --card-pad: 18px;
+  --row-h: 56px;
+  --fs-body: 15px;
+  --fs-meta: 12px;
+  --fs-title: 17px;
+  --fs-hero: 44px;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-pill: 999px;
+
+  --font-sans: "IBM Plex Sans", Inter, -apple-system, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, monospace;
+}
+
+.compact {
+  --pad-x: 16px;
+  --pad-y: 12px;
+  --gap: 12px;
+  --gap-sm: 8px;
+  --card-pad: 14px;
+  --row-h: 48px;
+  --fs-body: 14px;
+  --fs-meta: 11px;
+  --fs-title: 15px;
+  --fs-hero: 38px;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #060810;
+  color: var(--text-pri);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Screen (inside phone) is scrollable, hide its scrollbar */
+.screen-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.screen-scroll { scrollbar-width: none; }
+
+/* Subtle scan-line "depth" for the main app background */
+.app-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(107,138,255,0.07) 0%, rgba(0,0,0,0) 50%),
+    linear-gradient(180deg, #0A0E1A 0%, #050810 60%, #000000 100%);
+}
+
+/* Reusable */
+.mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1, "zero" 1; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+.card {
+  background: linear-gradient(180deg, rgba(26,32,56,0.55) 0%, rgba(19,24,41,0.85) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--card-pad);
+}
+
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-sec);
+  border: 1px solid var(--border-2);
+  background: rgba(26,32,56,0.4);
+}
+
+.label-meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-ter);
+}
+
+/* Button base */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: rgba(26,32,56,0.6);
+  color: var(--text-pri);
+  cursor: pointer;
+  transition: background 120ms ease, transform 80ms ease, border-color 120ms ease;
+  user-select: none;
+}
+.btn:hover { background: rgba(38,45,69,0.7); }
+.btn:active { transform: scale(0.985); }
+
+.btn-primary {
+  background: var(--accent);
+  color: #0A0E1A;
+  border-color: transparent;
+  box-shadow: 0 0 0 0 var(--accent-glow), 0 8px 24px -8px var(--accent-glow);
+}
+.btn-primary:hover { background: var(--accent); filter: brightness(1.06); }
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.btn-ghost:hover { background: rgba(255,255,255,0.04); }
+
+/* Focusable rows */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 12px var(--pad-x);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.row:hover { background: rgba(255,255,255,0.02); }
+
+/* Inputs (used in editor) */
+.input-bare {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-pri);
+  font-family: inherit;
+  resize: none;
+}
+.input-bare::placeholder { color: var(--text-ter); }
+
+/* Tag chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-pri);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-2);
+  white-space: nowrap;
+}
+.chip .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+
+/* Slow ambient breathing animation */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50%      { transform: scale(1.05); opacity: 1; }
+}
+@keyframes drift {
+  0%   { transform: translate3d(0,0,0); }
+  100% { transform: translate3d(0,-20px,0); }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 var(--accent-glow); }
+  100% { box-shadow: 0 0 0 26px rgba(107,138,255,0); }
+}
+
+/* Mic pulsing red */
+@keyframes mic-pulse {
+  0%, 100% { background: rgba(248,113,113,0.18); }
+  50%      { background: rgba(248,113,113,0.4); }
+}
+
+/* Slide-in screen transition */
+.screen-enter {
+  animation: screenIn 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+@keyframes screenIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

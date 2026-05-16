@@ -1,0 +1,59 @@
+@page "/reality-check"
+@using Microsoft.EntityFrameworkCore
+@using LucidDreamCompanion.Data
+@inject IDbContextFactory<LucidDbContext> DbFactory
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <div>
+            <span class="subtitle">Reality check</span>
+            <h1 style="font-size:24px">Are you dreaming?</h1>
+        </div>
+    </header>
+
+    <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+            <div class="label-meta" style="margin-bottom:10px">Try all three</div>
+            <ol style="padding-left:18px;margin:0;line-height:1.7;font-size:15px;color:var(--text-pri)">
+                <li>Look at your hands. Do you have the right number of fingers?</li>
+                <li>Read a sign, look away, read it again. Did it change?</li>
+                <li>Push a finger through your other palm. Does it pass through?</li>
+            </ol>
+        </div>
+
+        <div class="card" style="border-color:rgba(167,139,250,0.35);background:rgba(167,139,250,0.06)">
+            <div style="color:var(--lavender);font-size:13.5px;line-height:1.5">
+                The point isn't the test itself — it's the <b>habit of asking the question</b>. That habit follows you into your dreams.
+            </div>
+        </div>
+
+        <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" style="flex:1" @onclick='() => Log(false)' disabled="@_done">I'm awake</button>
+            <button class="btn" style="flex:1;color:var(--lucid);border-color:var(--lucid)" @onclick='() => Log(true)' disabled="@_done">I'm dreaming!</button>
+        </div>
+
+        @if (_done)
+        {
+            <div class="label-meta" style="text-align:center">Logged. Good work.</div>
+            <button class="btn btn-ghost" style="align-self:center;color:var(--accent)" @onclick='() => Nav.NavigateTo("/journal")'>Open journal →</button>
+        }
+    </div>
+</div>
+
+@code {
+    private bool _done;
+
+    private async Task Log(bool wasDreaming)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.RealityCheckLogs.Add(new RealityCheckLog
+        {
+            FiredAt = DateTime.UtcNow,
+            CompletedAt = DateTime.UtcNow,
+            WasDreaming = wasDreaming,
+        });
+        await db.SaveChangesAsync();
+        _done = true;
+    }
+}

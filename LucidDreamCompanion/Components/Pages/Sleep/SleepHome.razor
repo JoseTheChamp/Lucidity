@@ -1,0 +1,276 @@
+@page "/sleep"
+@implements IDisposable
+@inject ISleepSessionService Sessions
+@inject ICueProfileService Profiles
+@inject ICueSchedulerService Scheduler
+@inject IDreamJournalService Journal
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <div>
+            <span class="subtitle">Sleep</span>
+            <h1>Tonight</h1>
+        </div>
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/sleep/history")' aria-label="History">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-sec)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 3"/></svg>
+        </button>
+    </header>
+
+    <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:var(--gap)">
+        @if (_active is null && !_ending)
+        {
+            <!-- Idle: start a session -->
+            <div class="card" style="text-align:center;padding:28px 18px">
+                <div style="display:inline-flex;padding:18px;border-radius:50%;background:var(--accent-soft);margin-bottom:14px">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                </div>
+                <div style="font-size:17px;font-weight:500;margin-bottom:6px">Ready to sleep</div>
+                <div style="font-size:13px;color:var(--text-sec);line-height:1.5;margin-bottom:18px">
+                    Start a session to track your night. Pick a cue profile and its cues arm from this moment.
+                </div>
+
+                <div class="field" style="text-align:left;margin-bottom:14px">
+                    <span class="field-label">Cue profile</span>
+                    <select class="input" @bind="_selectedProfileId">
+                        <option value="0">No cues tonight</option>
+                        @foreach (var p in _profiles)
+                        {
+                            <option value="@p.Id">@p.Name (@p.Cues.Count cues)</option>
+                        }
+                    </select>
+                </div>
+
+                <button class="btn btn-primary" style="width:100%;padding:16px" @onclick="StartSleep" disabled="@_busy">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A0E1A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                    Start Sleep
+                </button>
+            </div>
+        }
+        else if (_active is not null && !_ending)
+        {
+            <!-- Active session -->
+            <div class="card" style="text-align:center;padding:28px 18px;border-color:rgba(167,139,250,0.4);background:linear-gradient(180deg,rgba(167,139,250,0.10),rgba(19,24,41,0.85))">
+                <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px">
+                    <span style="width:10px;height:10px;border-radius:50%;background:var(--lavender);box-shadow:0 0 12px var(--lavender);animation:breathe 2.4s ease-in-out infinite"></span>
+                    <span class="label-meta" style="color:var(--lavender)">Session in progress</span>
+                </div>
+                <div class="mono tabular" style="font-size:40px;font-weight:300;letter-spacing:-1px">@Elapsed</div>
+                <div style="font-size:12px;color:var(--text-sec);margin-top:4px">
+                    Started @_active.StartedAt.ToLocalTime().ToString("HH:mm")
+                </div>
+                <button class="btn" style="width:100%;padding:16px;margin-top:18px" @onclick="BeginEnd">End Sleep</button>
+            </div>
+
+            @if (_upcoming.Count > 0)
+            {
+                <div class="card">
+                    <div class="label-meta" style="margin-bottom:10px">Upcoming cues</div>
+                    @foreach (var log in _upcoming.Take(5))
+                    {
+                        <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-sec);padding:4px 0">
+                            <span>@log.CueLabel</span>
+                            <span class="mono">@log.ScheduledFor.ToLocalTime().ToString("HH:mm")</span>
+                        </div>
+                    }
+                </div>
+            }
+        }
+        else if (_ending && _active is not null)
+        {
+            <!-- End flow: quality + notes -->
+            <div class="card">
+                <div style="font-size:17px;font-weight:500;margin-bottom:4px">How did you sleep?</div>
+                <div style="font-size:12.5px;color:var(--text-sec);margin-bottom:14px">Session ran @Elapsed.</div>
+
+                <div class="field">
+                    <span class="field-label">Sleep quality</span>
+                    <div class="stars">
+                        @for (int s = 1; s <= 5; s++)
+                        {
+                            var star = s;
+                            <button class="@(_quality.HasValue && star <= _quality ? "on" : "")" @onclick="() => _quality = star">
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="@(_quality.HasValue && star <= _quality ? "currentColor" : "none")" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 2l3.1 6.3L22 9.3l-5 4.9 1.2 6.9L12 17.8 5.8 21.1 7 14.2l-5-4.9 6.9-1z"/>
+                                </svg>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="field" style="margin-top:12px">
+                    <span class="field-label">Notes (optional)</span>
+                    <textarea class="input-bare" style="min-height:70px" placeholder="Woke a few times, vivid near morning…" @bind="_notes"></textarea>
+                </div>
+
+                <div style="display:flex;gap:10px;margin-top:16px">
+                    <button class="btn" style="flex:1" @onclick="EndOnly" disabled="@_busy">End session</button>
+                    <button class="btn btn-primary" style="flex:1" @onclick="EndAndLog" disabled="@_busy">End &amp; log dreams</button>
+                </div>
+            </div>
+        }
+
+        @if (_lastSessions.Count > 0)
+        {
+            <div>
+                <div class="month-header">
+                    <span class="label-meta">Recent nights</span>
+                    <div class="rule"></div>
+                    <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px;color:var(--text-sec)" @onclick='() => Nav.NavigateTo("/sleep/history")'>All →</button>
+                </div>
+                @foreach (var s in _lastSessions.Take(3))
+                {
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(26,32,56,0.35);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer"
+                         @onclick="() => OpenSession(s.Id)">
+                        <div style="flex:1">
+                            <div style="font-size:14px;font-weight:500">@s.StartedAt.ToLocalTime().ToString("ddd, MMM d")</div>
+                            <div class="mono" style="font-size:11px;color:var(--text-ter);margin-top:2px">@DurationOf(s)</div>
+                        </div>
+                        @if (s.Quality.HasValue)
+                        {
+                            <span class="mono" style="font-size:12px;color:var(--text-sec)">@s.Quality / 5 ★</span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private SleepSession? _active;
+    private List<CueProfile> _profiles = new();
+    private List<SleepSession> _lastSessions = new();
+    private List<ScheduledCueLog> _upcoming = new();
+    private int _selectedProfileId;
+    private bool _ending;
+    private bool _busy;
+    private int? _quality;
+    private string _notes = "";
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _timerCts;
+
+    private string Elapsed
+    {
+        get
+        {
+            if (_active is null) return "00:00:00";
+            var span = DateTime.UtcNow - _active.StartedAt;
+            if (span < TimeSpan.Zero) span = TimeSpan.Zero;
+            return $"{(int)span.TotalHours:D2}:{span.Minutes:D2}:{span.Seconds:D2}";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Sessions.Changed += OnChanged;
+        await Reload();
+    }
+
+    private async void OnChanged() => await InvokeAsync(async () => { await Reload(); StateHasChanged(); });
+
+    private async Task Reload()
+    {
+        _active = await Sessions.GetActiveAsync();
+        _profiles = (await Profiles.ListAsync()).ToList();
+        _lastSessions = (await Sessions.ListAsync()).Where(s => s.EndedAt != null).ToList();
+        var activeProfileId = await Scheduler.GetActiveProfileIdAsync();
+        if (_selectedProfileId == 0 && activeProfileId is { } ap) _selectedProfileId = ap;
+        _upcoming = _active is not null ? (await Scheduler.GetUpcomingAsync()).ToList() : new();
+        EnsureTimer();
+    }
+
+    private void EnsureTimer()
+    {
+        var shouldRun = _active is not null;
+        if (shouldRun && _timer is null)
+        {
+            _timerCts = new CancellationTokenSource();
+            _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            _ = TickLoop(_timerCts.Token);
+        }
+        else if (!shouldRun && _timer is not null)
+        {
+            StopTimer();
+        }
+    }
+
+    private async Task TickLoop(CancellationToken ct)
+    {
+        try
+        {
+            while (_timer is not null && await _timer.WaitForNextTickAsync(ct))
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void StopTimer()
+    {
+        _timerCts?.Cancel();
+        _timer?.Dispose();
+        _timer = null;
+        _timerCts = null;
+    }
+
+    private async Task StartSleep()
+    {
+        _busy = true;
+        try
+        {
+            int? profileId = _selectedProfileId == 0 ? null : _selectedProfileId;
+            await Sessions.StartAsync(profileId);
+        }
+        finally { _busy = false; }
+    }
+
+    private void BeginEnd()
+    {
+        _ending = true;
+        _quality = null;
+        _notes = "";
+    }
+
+    private async Task EndOnly()
+    {
+        if (_active is null) return;
+        _busy = true;
+        try
+        {
+            await Sessions.EndAsync(_active.Id, _quality, _notes);
+            _ending = false;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task EndAndLog()
+    {
+        if (_active is null) return;
+        _busy = true;
+        try
+        {
+            await Sessions.EndAsync(_active.Id, _quality, _notes);
+            _ending = false;
+            var entry = await Journal.CreateAsync();   // auto-links to the just-ended session
+            Nav.NavigateTo($"/journal/edit/{entry.Id}?source=session");
+        }
+        finally { _busy = false; }
+    }
+
+    private void OpenSession(int id) => Nav.NavigateTo($"/sleep/history/{id}");
+
+    private static string DurationOf(SleepSession s)
+    {
+        if (s.EndedAt is null) return "in progress";
+        var d = s.EndedAt.Value - s.StartedAt;
+        return $"{(int)d.TotalHours}h {d.Minutes:D2}m";
+    }
+
+    public void Dispose()
+    {
+        Sessions.Changed -= OnChanged;
+        StopTimer();
+    }
+}

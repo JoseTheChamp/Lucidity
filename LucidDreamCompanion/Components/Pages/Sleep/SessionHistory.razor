@@ -1,0 +1,87 @@
+@page "/sleep/history"
+@implements IDisposable
+@inject ISleepSessionService Sessions
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/sleep")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Sleep</span>
+            <h1 style="font-size:22px">Session history</h1>
+        </div>
+    </header>
+
+    @if (_rows.Count == 0)
+    {
+        <EmptyState Title="No sleep sessions yet"
+                    Blurb="Press Start Sleep on the Sleep tab to track your first night." />
+    }
+    else
+    {
+        <div class="entry-list">
+            <div class="entry-group">
+                @foreach (var row in _rows)
+                {
+                    <div class="entry-row" @onclick="() => Open(row.Session.Id)">
+                        <div class="main">
+                            <div style="display:flex;align-items:center;justify-content:space-between">
+                                <span class="title">@row.Session.StartedAt.ToLocalTime().ToString("dddd, MMM d")</span>
+                                <span class="mono" style="font-size:11px;color:var(--text-ter)">@Duration(row.Session)</span>
+                            </div>
+                            <div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--text-sec)">
+                                <span><span class="mono tabular" style="color:var(--text-pri)">@row.Stats.DreamCount</span> dreams</span>
+                                <span><span class="mono tabular" style="color:var(--lucid)">@row.Stats.LucidCount</span> lucid</span>
+                                @if (row.Session.Quality.HasValue)
+                                {
+                                    <span class="mono">@row.Session.Quality / 5 ★</span>
+                                }
+                                @if (row.Session.TechniqueProfile is not null)
+                                {
+                                    <span style="color:var(--text-ter)">@row.Session.TechniqueProfile.Name</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private record Row(SleepSession Session, SessionStats Stats);
+    private List<Row> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Sessions.Changed += OnChanged;
+        await Reload();
+    }
+
+    private async void OnChanged() => await InvokeAsync(async () => { await Reload(); StateHasChanged(); });
+
+    private async Task Reload()
+    {
+        var list = await Sessions.ListAsync();
+        var rows = new List<Row>();
+        foreach (var s in list)
+        {
+            rows.Add(new Row(s, await Sessions.GetStatsAsync(s.Id)));
+        }
+        _rows = rows;
+    }
+
+    private void Open(int id) => Nav.NavigateTo($"/sleep/history/{id}");
+
+    private static string Duration(SleepSession s)
+    {
+        if (s.EndedAt is null) return "in progress";
+        var d = s.EndedAt.Value - s.StartedAt;
+        return $"{(int)d.TotalHours}h {d.Minutes:D2}m";
+    }
+
+    public void Dispose() => Sessions.Changed -= OnChanged;
+}

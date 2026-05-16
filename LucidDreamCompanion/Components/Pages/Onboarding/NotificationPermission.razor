@@ -1,0 +1,103 @@
+@page "/onboarding/notifications"
+@inject INotificationService Notifications
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <div class="appbar">
+        <div style="flex:1">
+            <span class="subtitle">Setup</span>
+            <h1 style="font-size:24px">Wake-up nudges</h1>
+        </div>
+    </div>
+
+    <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:18px">
+        <div class="card">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+                <div style="width:42px;height:42px;border-radius:12px;background:var(--accent-soft);border:1px solid var(--border-2);display:flex;align-items:center;justify-content:center">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+                    </svg>
+                </div>
+                <div>
+                    <div style="font-size:17px;font-weight:500">Why we ask</div>
+                    <div style="color:var(--text-sec);font-size:13px;margin-top:4px">Without notifications, the app can't reach you when you wake.</div>
+                </div>
+            </div>
+            <div style="font-size:13.5px;color:var(--text-sec);line-height:1.55">
+                Lucid Dream Companion uses two kinds of notifications:
+                <ul style="padding-left:18px;margin-top:8px">
+                    <li><b style="color:var(--text-pri)">Journal reminders</b> nudge you to write down a dream within seconds of waking, before it evaporates.</li>
+                    <li><b style="color:var(--text-pri)">Reality-check pings</b> appear during the day so you build the habit of questioning whether you're dreaming — the habit carries into your dreams.</li>
+                </ul>
+                Nothing leaves your device.
+            </div>
+        </div>
+
+        @if (_state == State.Denied)
+        {
+            <div class="card" style="border-color:rgba(248,113,113,0.35);background:rgba(248,113,113,0.06)">
+                <div style="color:var(--warn);font-weight:500;font-size:14px">Permission was denied.</div>
+                <div style="color:var(--text-sec);font-size:13px;margin-top:6px">You can still use the journal, but reminders won't fire. Enable notifications later in your device settings to turn them on.</div>
+            </div>
+        }
+        else if (_state == State.Granted)
+        {
+            <div class="card" style="border-color:rgba(94,234,212,0.35);background:rgba(94,234,212,0.06)">
+                <div style="color:var(--lucid);font-weight:500;font-size:14px">Notifications enabled.</div>
+                <div style="color:var(--text-sec);font-size:13px;margin-top:6px">Configure times in Settings → Notifications.</div>
+            </div>
+        }
+
+        <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" style="flex:1" @onclick="Ask" disabled="@(_busy)">
+                @(_busy ? "Asking…" : _state == State.Granted ? "Continue" : "Allow notifications")
+            </button>
+            <button class="btn" @onclick="Skip">Skip</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private enum State { Initial, Granted, Denied }
+    private State _state = State.Initial;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Notifications.AreNotificationsEnabledAsync())
+        {
+            _state = State.Granted;
+        }
+    }
+
+    private async Task Ask()
+    {
+        if (_state == State.Granted)
+        {
+            await Done();
+            return;
+        }
+        _busy = true;
+        try
+        {
+            var ok = await Notifications.RequestPermissionAsync();
+            _state = ok ? State.Granted : State.Denied;
+            if (ok) Preferences.Set("ldc.notifications.asked", true);
+        }
+        finally
+        {
+            _busy = false;
+        }
+        if (_state == State.Granted) await Done();
+    }
+
+    private Task Skip() => Done();
+
+    private Task Done()
+    {
+        Preferences.Set("ldc.onboarding.notifications.done", true);
+        Nav.NavigateTo("/journal", replace: true);
+        return Task.CompletedTask;
+    }
+}

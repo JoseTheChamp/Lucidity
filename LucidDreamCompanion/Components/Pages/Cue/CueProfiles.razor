@@ -1,0 +1,182 @@
+@page "/cues/profiles"
+@implements IDisposable
+@inject ICueProfileService Profiles
+@inject ICueSchedulerService Scheduler
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/cues")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Cues</span>
+            <h1 style="font-size:22px">Cue profiles</h1>
+        </div>
+        <button class="btn btn-primary" @onclick="NewProfile">+ New</button>
+    </header>
+
+    <div class="settings-list">
+        @if (_profiles.Count == 0)
+        {
+            <EmptyState Title="No cue profiles yet"
+                        Blurb="A profile is a named set of audio cues for one night. Build one, then activate it before bed.">
+                <button class="btn btn-primary" @onclick="NewProfile">+ New profile</button>
+            </EmptyState>
+        }
+        else
+        {
+            @foreach (var p in _profiles)
+            {
+                var isActive = p.Id == _activeProfileId;
+                <div class="card" style="@(isActive ? "border-color:rgba(167,139,250,0.4)" : "")">
+                    <div style="display:flex;align-items:flex-start;gap:10px;cursor:pointer" @onclick="() => Open(p.Id)">
+                        <div style="flex:1;min-width:0">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                                <span style="font-size:var(--fs-title);font-weight:500">@p.Name</span>
+                                @if (isActive)
+                                {
+                                    <span class="pill" style="border-color:rgba(167,139,250,0.4);color:var(--lavender)">Active</span>
+                                }
+                                @if (p.IsTechniqueTemplate)
+                                {
+                                    <span class="pill">Template</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(p.Description))
+                            {
+                                <div style="font-size:12.5px;color:var(--text-sec);margin-top:4px">@p.Description</div>
+                            }
+                            <div class="mono" style="font-size:11px;color:var(--text-ter);margin-top:6px">
+                                @p.Cues.Count @(p.Cues.Count == 1 ? "cue" : "cues")
+                            </div>
+                        </div>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div class="divider" style="margin:12px 0"></div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        @if (isActive)
+                        {
+                            <button class="btn btn-warn" style="padding:8px 12px;font-size:13px" @onclick="Deactivate">Deactivate</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-primary" style="padding:8px 12px;font-size:13px" @onclick="() => Activate(p)">Activate tonight</button>
+                        }
+                        <button class="btn" style="padding:8px 12px;font-size:13px" @onclick="() => Duplicate(p.Id)">Duplicate</button>
+                        @if (!p.IsTechniqueTemplate)
+                        {
+                            <button class="btn" style="padding:8px 12px;font-size:13px" @onclick="() => Open(p.Id)">Edit</button>
+                            <button class="btn btn-ghost" style="padding:8px 10px" @onclick="() => Delete(p)" aria-label="Delete">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        }
+
+        @if (!string.IsNullOrEmpty(_status))
+        {
+            <div class="label-meta" style="text-align:center">@_status</div>
+        }
+    </div>
+</div>
+
+<ConfirmDialog @ref="_confirm" />
+
+@code {
+    private List<CueProfile> _profiles = new();
+    private int? _activeProfileId;
+    private ConfirmDialog? _confirm;
+    private string _status = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Profiles.Changed += OnChanged;
+        Scheduler.ActiveProfileChanged += OnChanged;
+        await Reload();
+    }
+
+    private async void OnChanged() => await InvokeAsync(async () => { await Reload(); StateHasChanged(); });
+
+    private async Task Reload()
+    {
+        _profiles = (await Profiles.ListAsync()).ToList();
+        _activeProfileId = await Scheduler.GetActiveProfileIdAsync();
+    }
+
+    private void Open(int id) => Nav.NavigateTo($"/cues/profiles/{id}");
+
+    private async Task NewProfile()
+    {
+        var p = await Profiles.CreateAsync("New profile");
+        Nav.NavigateTo($"/cues/profiles/{p.Id}");
+    }
+
+    private async Task Duplicate(int id)
+    {
+        var copy = await Profiles.DuplicateAsync(id);
+        if (copy is not null) _status = $"Duplicated → {copy.Name}";
+    }
+
+    private async Task Delete(CueProfile p)
+    {
+        if (_confirm is null) return;
+        var ok = await _confirm.ShowAsync(
+            "Delete this profile?",
+            $"\"{p.Name}\" and its {p.Cues.Count} cue(s) will be removed. Other profiles are untouched.",
+            "Delete");
+        if (!ok) return;
+        if (p.Id == _activeProfileId) await Scheduler.DeactivateAsync();
+        await Profiles.DeleteAsync(p.Id);
+    }
+
+    private async Task Activate(CueProfile p)
+    {
+        if (_confirm is null) return;
+
+        if (!Scheduler.ExactAlarmsAllowed)
+        {
+            var go = await _confirm.ShowAsync(
+                "Allow exact alarms",
+                "Android needs permission to fire cues at exact times. Open settings to allow it?",
+                "Open settings", "Later", destructive: false);
+            if (go) Scheduler.RequestExactAlarmPermission();
+            return;
+        }
+        if (!Scheduler.BatteryOptimizationIgnored)
+        {
+            var go = await _confirm.ShowAsync(
+                "Battery optimization",
+                "To fire cues reliably overnight, this app should be exempt from battery optimization. Open settings?",
+                "Open settings", "Skip", destructive: false);
+            if (go)
+            {
+                Scheduler.RequestBatteryExemption();
+                return;
+            }
+        }
+
+        var confirm = await _confirm.ShowAsync(
+            "Activate tonight?",
+            $"\"{p.Name}\" will arm its cues and start the overnight monitor. Any other active profile is switched off.",
+            "Activate", destructive: false);
+        if (!confirm) return;
+
+        await Scheduler.ActivateProfileAsync(p.Id, DateTime.UtcNow);
+        _status = $"{p.Name} is armed for tonight";
+    }
+
+    private async Task Deactivate()
+    {
+        await Scheduler.DeactivateAsync();
+        _status = "Cues deactivated";
+    }
+
+    public void Dispose()
+    {
+        Profiles.Changed -= OnChanged;
+        Scheduler.ActiveProfileChanged -= OnChanged;
+    }
+}

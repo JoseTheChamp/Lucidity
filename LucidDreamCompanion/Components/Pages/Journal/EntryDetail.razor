@@ -1,0 +1,54 @@
+@page "/journal/entry/{Id:int}"
+@inject IDreamJournalService Journal
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/journal")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1"></div>
+        <button class="btn" @onclick="Edit">Edit</button>
+    </header>
+
+    @if (_entry is null)
+    {
+        <div class="empty"><div class="title">Not found</div></div>
+    }
+    else
+    {
+        <div class="detail-meta">
+            <LucidityEye Level="_entry.Lucidity" Size="22" />
+            <span class="mono">@_entry.DreamDate.ToString("ddd · MMM d, yyyy").ToUpperInvariant()</span>
+            @if (_entry.SleepQuality.HasValue)
+            {
+                <span class="mono" style="margin-left:auto">@_entry.SleepQuality.Value / 5 ★</span>
+            }
+        </div>
+        <div class="editor">
+            <h1 style="margin:0;font-size:24px;letter-spacing:-0.3px">@(string.IsNullOrWhiteSpace(_entry.Title) ? "(untitled)" : _entry.Title)</h1>
+            <div style="white-space:pre-wrap;font-size:15px;line-height:1.6;color:var(--text-pri)">@_entry.Body</div>
+            @if (_entry.Tags.Count > 0)
+            {
+                <div class="picker-row">
+                    @foreach (var t in _entry.Tags)
+                    {
+                        <TagChip Tag="t" />
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private DreamEntry? _entry;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _entry = await Journal.GetAsync(Id);
+    }
+
+    private void Edit() => Nav.NavigateTo($"/journal/edit/{Id}");
+}

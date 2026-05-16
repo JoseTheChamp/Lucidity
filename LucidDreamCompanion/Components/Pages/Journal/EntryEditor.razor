@@ -1,0 +1,321 @@
+@page "/journal/edit/{Id:int}"
+@implements IDisposable
+@using System.Globalization
+@inject IDreamJournalService Journal
+@inject ISpeechToTextService Speech
+@inject IAppSettingsService SettingsService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick="Back" aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1;text-align:center">
+            <div class="label-meta">@(_entry?.Id > 0 ? "Editing" : "New entry")</div>
+            <div class="mono" style="font-size:12px;color:var(--text-sec);margin-top:2px">@_saveStatus</div>
+        </div>
+        <button class="btn btn-ghost" style="color:var(--accent)" @onclick="Done">Done</button>
+    </header>
+
+    @if (_entry is null)
+    {
+        <div class="empty"><div class="title">Loading…</div></div>
+    }
+    else
+    {
+        <div class="editor">
+            <input class="input-bare title-input" placeholder="Title (optional)" @bind="_entry.Title" @bind:event="oninput" @bind:after="MarkDirty" />
+
+            <textarea class="input-bare body-input" id="ldc-body"
+                      placeholder="What did you dream? Write fast — half-formed thoughts are gold."
+                      @bind="_entry.Body" @bind:event="oninput" @bind:after="OnBodyInput"
+                      @ref="_bodyRef"></textarea>
+
+            @if (Speech.IsSupported)
+            {
+                <div class="voice-row">
+                    <button class="mic-btn @(_recording ? "recording" : "")" @onclick="ToggleVoice" aria-label="Dictate">
+                        @if (_recording)
+                        {
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+                        }
+                        else
+                        {
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
+                        }
+                    </button>
+                    @if (_recording)
+                    {
+                        <div class="voice-live">
+                            <span class="rec-dot"></span>
+                            <div class="waveform">
+                                <span></span><span></span><span></span><span></span><span></span>
+                            </div>
+                            <span class="voice-label">Listening… tap to stop</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="voice-label" style="color:var(--text-ter)">Tap the mic to speak your dream</span>
+                    }
+                </div>
+            }
+            else if (_micHint)
+            {
+                <div style="font-size:12px;color:var(--text-ter);padding:0 2px">
+                    Voice input needs microphone permission, or this device has no speech recognizer.
+                </div>
+            }
+
+            <div class="field">
+                <span class="field-label">Lucidity</span>
+                <LucidityPicker Value="_entry.Lucidity" ValueChanged="OnLucidityChanged" />
+            </div>
+
+            <div class="field">
+                <span class="field-label">Sleep quality</span>
+                <div class="stars">
+                    @for (int s = 1; s <= 5; s++)
+                    {
+                        var star = s;
+                        <button class="@(_entry.SleepQuality.HasValue && star <= _entry.SleepQuality ? "on" : "")"
+                                @onclick="() => SetQuality(star)" aria-label="@star stars">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="@(_entry.SleepQuality.HasValue && star <= _entry.SleepQuality ? "currentColor" : "none")" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2l3.1 6.3L22 9.3l-5 4.9 1.2 6.9L12 17.8 5.8 21.1 7 14.2l-5-4.9 6.9-1z"/>
+                            </svg>
+                        </button>
+                    }
+                    @if (_entry.SleepQuality.HasValue)
+                    {
+                        <button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;color:var(--text-ter)" @onclick="() => SetQuality(null)">clear</button>
+                    }
+                </div>
+            </div>
+
+            <div class="field">
+                <span class="field-label">Dream date</span>
+                <input type="date" @bind="_entry.DreamDate" @bind:after="MarkDirty" />
+            </div>
+
+            <div class="field">
+                <span class="field-label">Sleep session</span>
+                <select class="input" value="@(_entry.SleepSessionId?.ToString() ?? "0")" @onchange="OnSessionChanged">
+                    <option value="0">Not linked</option>
+                    @foreach (var s in _sessions)
+                    {
+                        <option value="@s.Id">@SessionLabel(s)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="field">
+                <span class="field-label">Tags</span>
+                <TagPicker SelectedIds="_tagIds" SelectedIdsChanged="OnTagsChanged" />
+            </div>
+        </div>
+    }
+</div>
+
+<Toast @ref="_toast" />
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [SupplyParameterFromQuery] public string? Fresh { get; set; }
+    [SupplyParameterFromQuery] public string? Mic { get; set; }
+
+    private DreamEntry? _entry;
+    private List<int> _tagIds = new();
+    private List<SleepSession> _sessions = new();
+    private CancellationTokenSource? _debounceCts;
+    private string _saveStatus = "";
+    private Toast? _toast;
+    private ElementReference _bodyRef;
+    private bool _bodyJustChanged;
+
+    private bool _recording;
+    private bool _micHint;
+    private bool _micAutoStartPending;
+    private string _voiceBase = "";
+    private CancellationTokenSource? _voiceCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _entry = await Journal.GetAsync(Id);
+        if (_entry is null)
+        {
+            Nav.NavigateTo("/journal");
+            return;
+        }
+        _tagIds = _entry.Tags.Select(t => t.Id).ToList();
+        _sessions = (await Journal.ListRecentSessionsAsync()).ToList();
+        _saveStatus = Fresh == "1" ? "" : "Saved";
+        if (Mic == "1") _micAutoStartPending = true;
+    }
+
+    private void OnTagsChanged(IReadOnlyList<int> ids)
+    {
+        _tagIds = ids.ToList();
+        MarkDirty();
+    }
+
+    private void OnSessionChanged(ChangeEventArgs e)
+    {
+        if (_entry is null) return;
+        _entry.SleepSessionId = int.TryParse(e.Value?.ToString(), out var id) && id > 0 ? id : null;
+        MarkDirty();
+    }
+
+    private static string SessionLabel(SleepSession s)
+    {
+        var start = s.StartedAt.ToLocalTime();
+        var dur = s.EndedAt is null ? "in progress" : $"{(int)(s.EndedAt.Value - s.StartedAt).TotalHours}h";
+        return $"{start:ddd MMM d, HH:mm} · {dur}";
+    }
+
+    private void OnLucidityChanged(LucidityLevel lv)
+    {
+        if (_entry is null) return;
+        _entry.Lucidity = lv;
+        MarkDirty();
+    }
+
+    private void SetQuality(int? q)
+    {
+        if (_entry is null) return;
+        _entry.SleepQuality = q;
+        MarkDirty();
+    }
+
+    private void OnBodyInput()
+    {
+        _bodyJustChanged = true;
+        MarkDirty();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_bodyJustChanged)
+        {
+            _bodyJustChanged = false;
+            try { await JS.InvokeVoidAsync("ldc.autosize", _bodyRef); } catch { }
+        }
+        if (_micAutoStartPending && Speech.IsSupported)
+        {
+            _micAutoStartPending = false;
+            await StartVoice();
+        }
+    }
+
+    private async Task ToggleVoice()
+    {
+        if (_recording) StopVoice();
+        else await StartVoice();
+    }
+
+    private async Task StartVoice()
+    {
+        if (_entry is null || _recording) return;
+        if (!await Speech.RequestPermissionAsync())
+        {
+            _micHint = true;
+            StateHasChanged();
+            return;
+        }
+        _micHint = false;
+        _voiceBase = _entry.Body ?? "";
+        _recording = true;
+        _voiceCts = new CancellationTokenSource();
+        var locale = await ResolveLocaleAsync();
+        _ = ConsumeSpeech(locale, _voiceCts.Token);
+        StateHasChanged();
+    }
+
+    private void StopVoice()
+    {
+        _voiceCts?.Cancel();
+        _recording = false;
+        StateHasChanged();
+    }
+
+    private async Task ConsumeSpeech(CultureInfo locale, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var transcript in Speech.StreamRecognitionAsync(locale, ct))
+            {
+                if (_entry is null) break;
+                var sep = string.IsNullOrWhiteSpace(_voiceBase) ? "" : "\n\n";
+                _entry.Body = string.IsNullOrWhiteSpace(transcript)
+                    ? _voiceBase
+                    : _voiceBase + sep + transcript;
+                _bodyJustChanged = true;
+                MarkDirty();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception)
+        {
+            await InvokeAsync(() => { _recording = false; StateHasChanged(); });
+        }
+    }
+
+    private async Task<CultureInfo> ResolveLocaleAsync()
+    {
+        try
+        {
+            var settings = await SettingsService.GetAsync();
+            if (!string.IsNullOrWhiteSpace(settings.SpeechLocale))
+                return CultureInfo.GetCultureInfo(settings.SpeechLocale);
+        }
+        catch { /* fall through to device culture */ }
+        return CultureInfo.CurrentCulture;
+    }
+
+    private void MarkDirty()
+    {
+        _saveStatus = "Saving…";
+        _debounceCts?.Cancel();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+        _ = DebouncedSave(token);
+    }
+
+    private async Task DebouncedSave(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(500, token);
+            if (token.IsCancellationRequested || _entry is null) return;
+            await Journal.SaveAsync(_entry, _tagIds, token);
+            _saveStatus = "Saved";
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task Done()
+    {
+        _voiceCts?.Cancel();
+        _debounceCts?.Cancel();
+        if (_entry is not null)
+        {
+            await Journal.SaveAsync(_entry, _tagIds);
+        }
+        Nav.NavigateTo("/journal");
+    }
+
+    private void Back()
+    {
+        _voiceCts?.Cancel();
+        Nav.NavigateTo("/journal");
+    }
+
+    public void Dispose()
+    {
+        _voiceCts?.Cancel();
+        _debounceCts?.Cancel();
+    }
+}

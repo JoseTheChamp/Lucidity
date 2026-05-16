@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<TargetFrameworks>net10.0-android</TargetFrameworks>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>LucidDreamCompanion</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<EnableDefaultCssItems>false</EnableDefaultCssItems>
+		<Nullable>enable</Nullable>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<!-- EF Core 10 may emit experimental-API warnings; allow our nullable-strict policy without blocking those. -->
+		<WarningsNotAsErrors>$(WarningsNotAsErrors);EF1001;CS1591</WarningsNotAsErrors>
+
+		<ApplicationTitle>Lucid Dream Companion</ApplicationTitle>
+		<ApplicationId>com.josef.luciddreamcompanion</ApplicationId>
+		<ApplicationDisplayVersion>0.1</ApplicationDisplayVersion>
+		<ApplicationVersion>1</ApplicationVersion>
+
+		<WindowsPackageType>None</WindowsPackageType>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#6B8AFF" />
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#0A0E1A" BaseSize="128,128" />
+		<MauiImage Include="Resources\Images\*" />
+		<MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
+		<MauiFont Include="Resources\Fonts\*" />
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+		<MauiAsset Remove="Resources\Raw\Audio\_generate.ps1" />
+		<MauiAsset Remove="Resources\Raw\Audio\CREDITS.md" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+		<PackageReference Include="Plugin.LocalNotification" Version="14.1.0" />
+		<!-- CommunityToolkit.Maui is listed in spec Phase 1 but not actually used until Phase 3 (audio/picker).
+		     Adding it now would force a MAUI 10.0.10+ upgrade vs the installed workload (10.0.1).
+		     We add it in Phase 3 when we need it. -->
+
+	</ItemGroup>
+
+</Project>

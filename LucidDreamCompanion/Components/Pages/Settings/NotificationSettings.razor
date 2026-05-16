@@ -1,0 +1,252 @@
+@page "/settings/notifications"
+@implements IDisposable
+@inject IAppSettingsService SettingsService
+@inject IJournalReminderService Reminders
+@inject INotificationService Notifications
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/settings")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Settings</span>
+            <h1 style="font-size:22px">Notifications</h1>
+        </div>
+    </header>
+
+    @if (_settings is null)
+    {
+        <div class="empty"><div class="title">Loading…</div></div>
+    }
+    else
+    {
+        <div class="settings-list">
+            @if (!_permissionGranted)
+            {
+                <div class="card" style="border-color:rgba(248,113,113,0.35);background:rgba(248,113,113,0.06)">
+                    <div style="color:var(--warn);font-size:14px;font-weight:500">Notifications are disabled at the OS level.</div>
+                    <div style="color:var(--text-sec);font-size:13px;margin-top:6px">Open device settings to allow notifications for this app.</div>
+                    <button class="btn" style="margin-top:10px" @onclick="RequestPermission">Request again</button>
+                </div>
+            }
+
+            <!-- Journal reminders list -->
+            <div class="field">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                    <span class="field-label" style="margin:0">Journal reminders</span>
+                    <button class="btn btn-primary" style="padding:6px 12px;font-size:12px" @onclick="AddReminder">+ Add</button>
+                </div>
+                @if (_reminders.Count == 0)
+                {
+                    <div style="color:var(--text-ter);font-size:13px">No reminders set. Add one to get a daily nudge to capture your dreams.</div>
+                }
+                else
+                {
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        @foreach (var r in _reminders)
+                        {
+                            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(26,32,56,0.35);border:1px solid var(--border);border-radius:10px">
+                                <input type="checkbox" checked="@r.Enabled" @onchange="e => ToggleReminder(r, e)" />
+                                <input type="time" value="@r.Time.ToString("HH:mm")" @onchange="e => ChangeReminderTime(r, e)" />
+                                <span class="label-meta" style="margin-left:auto">@(r.Enabled ? "ACTIVE" : "OFF")</span>
+                                <button class="btn btn-ghost" style="padding:6px 8px" @onclick="() => RemoveReminder(r)" aria-label="Remove">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+                <button class="btn" style="margin-top:10px;padding:8px 12px;font-size:12px" @onclick="TestJournal">Test journal notification</button>
+            </div>
+
+            <!-- Reality checks -->
+            <div class="field">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                    <input type="checkbox" id="rcen" @bind="_settings.RealityCheckEnabled" />
+                    <label for="rcen" class="field-label" style="margin:0">Reality-check pings</label>
+                </div>
+                @if (_settings.RealityCheckEnabled)
+                {
+                    <div style="display:flex;flex-direction:column;gap:10px">
+                        <div style="display:flex;gap:6px">
+                            <button class="lucidity-row-btn @(_settings.RealityCheckMode == RealityCheckMode.RandomCountPerDay ? "active" : "")"
+                                    @onclick="() => _settings.RealityCheckMode = RealityCheckMode.RandomCountPerDay">
+                                Random count
+                            </button>
+                            <button class="lucidity-row-btn @(_settings.RealityCheckMode == RealityCheckMode.FixedInterval ? "active" : "")"
+                                    @onclick="() => _settings.RealityCheckMode = RealityCheckMode.FixedInterval">
+                                Fixed interval
+                            </button>
+                        </div>
+
+                        @if (_settings.RealityCheckMode == RealityCheckMode.RandomCountPerDay)
+                        {
+                            <div style="display:flex;align-items:center;gap:10px">
+                                <span class="label-meta" style="width:90px">Pings / day</span>
+                                <input type="number" min="1" max="20" @bind="_settings.RealityCheckCountPerDay" style="width:90px" class="input" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="display:flex;align-items:center;gap:10px">
+                                <span class="label-meta" style="width:90px">Every</span>
+                                <input type="number" min="5" max="600" @bind="_settings.RealityCheckIntervalMinutes" style="width:90px" class="input" />
+                                <span class="label-meta">minutes</span>
+                            </div>
+                        }
+
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                            <span class="label-meta" style="width:90px">Window</span>
+                            <input type="time" value="@_settings.RealityCheckStart.ToString("HH:mm")" @onchange="e => SetRcStart(e)" />
+                            <span class="label-meta">to</span>
+                            <input type="time" value="@_settings.RealityCheckEnd.ToString("HH:mm")" @onchange="e => SetRcEnd(e)" />
+                        </div>
+                        <button class="btn" style="padding:8px 12px;font-size:12px;align-self:flex-start" @onclick="TestRealityCheck">Test reality check</button>
+                    </div>
+                }
+            </div>
+
+            <button class="btn btn-primary" @onclick="Save" disabled="@_busy">
+                @(_busy ? "Saving…" : "Save & reschedule")
+            </button>
+            @if (!string.IsNullOrEmpty(_status))
+            {
+                <div class="label-meta" style="text-align:center">@_status</div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+.lucidity-row-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 8px;
+    color: var(--text-sec);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.lucidity-row-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+</style>
+
+@code {
+    private AppSettings? _settings;
+    private List<JournalReminder> _reminders = new();
+    private bool _permissionGranted;
+    private bool _busy;
+    private string _status = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await SettingsService.GetAsync();
+        _reminders = (await Reminders.ListAsync()).ToList();
+        _permissionGranted = await Notifications.AreNotificationsEnabledAsync();
+        Reminders.Changed += OnRemindersChanged;
+    }
+
+    private async void OnRemindersChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            _reminders = (await Reminders.ListAsync()).ToList();
+            StateHasChanged();
+        });
+    }
+
+    private async Task RequestPermission()
+    {
+        _permissionGranted = await Notifications.RequestPermissionAsync();
+    }
+
+    private async Task AddReminder()
+    {
+        // Default new entries to a time that doesn't already exist.
+        var defaults = new[] { new TimeOnly(6, 30), new TimeOnly(8, 0), new TimeOnly(12, 0), new TimeOnly(22, 0) };
+        var pick = defaults.FirstOrDefault(d => _reminders.All(r => r.Time != d), defaults[0]);
+        await Reminders.AddAsync(pick);
+    }
+
+    private async Task ToggleReminder(JournalReminder r, ChangeEventArgs e)
+    {
+        var enabled = (bool)(e.Value ?? false);
+        await Reminders.UpdateAsync(r.Id, r.Time, enabled);
+    }
+
+    private async Task ChangeReminderTime(JournalReminder r, ChangeEventArgs e)
+    {
+        if (TimeOnly.TryParse(e.Value?.ToString(), out var t))
+        {
+            await Reminders.UpdateAsync(r.Id, t, r.Enabled);
+        }
+    }
+
+    private async Task RemoveReminder(JournalReminder r)
+    {
+        await Reminders.DeleteAsync(r.Id);
+    }
+
+    private void SetRcStart(ChangeEventArgs e)
+    {
+        if (_settings is null) return;
+        if (TimeOnly.TryParse(e.Value?.ToString(), out var t)) _settings.RealityCheckStart = t;
+    }
+
+    private void SetRcEnd(ChangeEventArgs e)
+    {
+        if (_settings is null) return;
+        if (TimeOnly.TryParse(e.Value?.ToString(), out var t)) _settings.RealityCheckEnd = t;
+    }
+
+    private async Task Save()
+    {
+        if (_settings is null) return;
+        _busy = true;
+        _status = "";
+        try
+        {
+            if (_settings.RealityCheckCountPerDay < 1) _settings.RealityCheckCountPerDay = 1;
+            if (_settings.RealityCheckCountPerDay > 20) _settings.RealityCheckCountPerDay = 20;
+            if (_settings.RealityCheckIntervalMinutes < 5) _settings.RealityCheckIntervalMinutes = 5;
+            if (_settings.RealityCheckIntervalMinutes > 600) _settings.RealityCheckIntervalMinutes = 600;
+            await SettingsService.SaveAsync(_settings);
+            await Notifications.RescheduleAllAsync();
+            _status = "Saved";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task TestJournal()
+    {
+        await Notifications.FireTestAsync(
+            "Capture last night's dream",
+            "Tap to start a new entry.",
+            NotificationService.ActionJournalNew,
+            NotificationService.ChannelJournal);
+        _status = "Test sent — fires in 3s";
+    }
+
+    private async Task TestRealityCheck()
+    {
+        await Notifications.FireTestAsync(
+            "Reality check",
+            "Are you dreaming? Look at your hands.",
+            NotificationService.ActionRealityCheck,
+            NotificationService.ChannelRealityCheck);
+        _status = "Test sent — fires in 3s";
+    }
+
+    public void Dispose()
+    {
+        Reminders.Changed -= OnRemindersChanged;
+    }
+}

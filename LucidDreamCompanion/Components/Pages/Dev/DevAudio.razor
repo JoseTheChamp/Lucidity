@@ -1,0 +1,117 @@
+@page "/dev/audio"
+@implements IDisposable
+@using Microsoft.EntityFrameworkCore
+@using LucidDreamCompanion.Data
+@inject IDbContextFactory<LucidDbContext> DbFactory
+@inject IAudioService Audio
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/cues")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Dev</span>
+            <h1 style="font-size:22px">Audio sandbox</h1>
+        </div>
+    </header>
+
+    <div class="settings-list">
+        <div class="field">
+            <span class="field-label">Audio asset</span>
+            <select class="input" @bind="_selectedId">
+                @foreach (var a in _assets)
+                {
+                    <option value="@a.Id">@a.DisplayName · @a.Source</option>
+                }
+            </select>
+        </div>
+
+        <div class="field">
+            <span class="field-label">Volume · @_volume%</span>
+            <input type="range" min="0" max="100" step="1" @bind="_volume" @bind:event="oninput" style="width:100%" />
+        </div>
+
+        <div class="field">
+            <span class="field-label">Fade-in · @_fadeIn s</span>
+            <input type="range" min="0" max="20" step="1" @bind="_fadeIn" @bind:event="oninput" style="width:100%" />
+        </div>
+
+        <div class="field">
+            <span class="field-label">Loop count</span>
+            <input type="number" min="1" max="100" @bind="_loops" class="input" style="width:120px" />
+        </div>
+
+        <div class="field">
+            <span class="field-label">Vibration</span>
+            <select class="input" @bind="_vibration">
+                <option value="">None</option>
+                <option value="0,200">Single short</option>
+                <option value="0,400,200,400">Double pulse</option>
+                <option value="0,800">Long</option>
+            </select>
+        </div>
+
+        <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" style="flex:1" @onclick="Play" disabled="@(_selectedId == 0)">Play</button>
+            <button class="btn" style="flex:1" @onclick="Stop">Stop all</button>
+        </div>
+
+        <div class="mono" style="font-size:12px;color:var(--text-ter);text-align:center">@_status</div>
+    </div>
+</div>
+
+@code {
+    private List<AudioAsset> _assets = new();
+    private int _selectedId;
+    private int _volume = 70;
+    private int _fadeIn = 0;
+    private int _loops = 1;
+    private string _vibration = "";
+    private string _status = "ready";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Audio.PlaybackFinished += OnFinished;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _assets = await db.AudioAssets.AsNoTracking().OrderBy(a => a.Source).ThenBy(a => a.DisplayName).ToListAsync();
+        _selectedId = _assets.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private async Task Play()
+    {
+        var asset = _assets.FirstOrDefault(a => a.Id == _selectedId);
+        if (asset is null) return;
+        await Audio.StopAllAsync();
+        var h = await Audio.PlayAsync(asset, new AudioPlaybackOptions
+        {
+            VolumePercent = _volume,
+            FadeInSeconds = _fadeIn,
+            LoopCount = _loops,
+            VibrationPattern = string.IsNullOrWhiteSpace(_vibration) ? null : _vibration,
+        });
+        _status = h > 0 ? $"playing · handle {h}" : $"play failed — {Audio.LastError ?? "unknown error"}";
+    }
+
+    private async Task Stop()
+    {
+        await Audio.StopAllAsync();
+        _status = "stopped";
+    }
+
+    private void OnFinished(object? sender, PlaybackEventArgs e)
+    {
+        InvokeAsync(() =>
+        {
+            _status = $"finished · handle {e.Handle}";
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Audio.PlaybackFinished -= OnFinished;
+        _ = Audio.StopAllAsync();
+    }
+}

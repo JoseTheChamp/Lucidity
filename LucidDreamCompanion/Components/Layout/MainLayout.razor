@@ -1,0 +1,52 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Nav
+@inject NotificationRouter Router
+
+<div class="app-shell">
+    @Body
+    @if (ShowNav)
+    {
+        <BottomNav />
+    }
+</div>
+
+@code {
+    private bool ShowNav => !HiddenRoutes.Any(r => new Uri(Nav.Uri).AbsolutePath.StartsWith(r, StringComparison.OrdinalIgnoreCase));
+
+    private static readonly string[] HiddenRoutes = new[]
+    {
+        "/journal/edit",
+        "/journal/new",
+        "/onboarding",
+    };
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocation;
+        Router.RouteRequested += OnRoute;
+
+        var pending = Router.ConsumePending();
+        if (!string.IsNullOrEmpty(pending))
+        {
+            Nav.NavigateTo(pending, replace: true);
+        }
+    }
+
+    private void OnLocation(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    private void OnRoute(string route)
+    {
+        InvokeAsync(() =>
+        {
+            Nav.NavigateTo(route);
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocation;
+        Router.RouteRequested -= OnRoute;
+    }
+}

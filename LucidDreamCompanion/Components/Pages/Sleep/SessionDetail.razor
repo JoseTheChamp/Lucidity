@@ -1,0 +1,154 @@
+@page "/sleep/history/{Id:int}"
+@using Microsoft.EntityFrameworkCore
+@using LucidDreamCompanion.Data
+@inject ISleepSessionService Sessions
+@inject IDbContextFactory<LucidDbContext> DbFactory
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/sleep/history")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Sleep session</span>
+            <h1 style="font-size:22px">@(_session?.StartedAt.ToLocalTime().ToString("MMM d") ?? "…")</h1>
+        </div>
+    </header>
+
+    @if (_session is null)
+    {
+        <div class="empty"><div class="title">Session not found</div></div>
+    }
+    else
+    {
+        <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:var(--gap)">
+            <div class="card">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                    <div>
+                        <div class="label-meta">Duration</div>
+                        <div class="mono tabular" style="font-size:18px;margin-top:4px">@Duration()</div>
+                    </div>
+                    <div>
+                        <div class="label-meta">Dreams</div>
+                        <div class="mono tabular" style="font-size:18px;margin-top:4px">@_entries.Count</div>
+                    </div>
+                    <div>
+                        <div class="label-meta">Lucid</div>
+                        <div class="mono tabular" style="font-size:18px;margin-top:4px;color:var(--lucid)">@_lucidCount</div>
+                    </div>
+                </div>
+                <div class="divider" style="margin:14px 0"></div>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-sec)">
+                    <span>@_session.StartedAt.ToLocalTime().ToString("ddd MMM d · HH:mm") → @(_session.EndedAt?.ToLocalTime().ToString("HH:mm") ?? "—")</span>
+                    @if (_session.Quality.HasValue)
+                    {
+                        <span class="mono">@_session.Quality / 5 ★</span>
+                    }
+                </div>
+                @if (_session.TechniqueProfile is not null)
+                {
+                    <div style="font-size:12px;color:var(--text-ter);margin-top:8px">Cue profile: @_session.TechniqueProfile.Name</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_session.Notes))
+                {
+                    <div style="font-size:13px;color:var(--text-pri);margin-top:10px;white-space:pre-wrap">@_session.Notes</div>
+                }
+            </div>
+
+            <div>
+                <div class="month-header">
+                    <span class="label-meta">Dreams</span>
+                    <div class="rule"></div>
+                    <span class="count">@_entries.Count</span>
+                </div>
+                @if (_entries.Count == 0)
+                {
+                    <div style="color:var(--text-ter);font-size:13px;padding:4px 4px 8px">No dreams logged for this night.</div>
+                }
+                else
+                {
+                    <div class="entry-group">
+                        @foreach (var e in _entries)
+                        {
+                            <div class="entry-row" @onclick="() => OpenEntry(e.Id)">
+                                <div class="gutter">
+                                    <LucidityEye Level="e.Lucidity" Size="20" />
+                                </div>
+                                <div class="main">
+                                    <div class="title">@(string.IsNullOrWhiteSpace(e.Title) ? "(untitled)" : e.Title)</div>
+                                    <div class="body">@e.Body</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div>
+                <div class="month-header">
+                    <span class="label-meta">Cue log</span>
+                    <div class="rule"></div>
+                    <span class="count">@_cueLogs.Count(l => l.Status == CueLogStatus.Fired)/@_cueLogs.Count</span>
+                </div>
+                @if (_cueLogs.Count == 0)
+                {
+                    <div style="color:var(--text-ter);font-size:13px;padding:4px 4px 8px">No cues were armed for this session.</div>
+                }
+                else
+                {
+                    @foreach (var log in _cueLogs)
+                    {
+                        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(26,32,56,0.35);border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+                            <span style="width:8px;height:8px;border-radius:50%;background:@StatusColor(log.Status)"></span>
+                            <span style="flex:1;font-size:13px">@log.CueLabel</span>
+                            <span class="mono" style="font-size:11px;color:var(--text-ter)">@log.ScheduledFor.ToLocalTime().ToString("HH:mm")</span>
+                            <span class="label-meta">@(log.Status ?? "—")</span>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private SleepSession? _session;
+    private List<DreamEntry> _entries = new();
+    private List<ScheduledCueLog> _cueLogs = new();
+    private int _lucidCount;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _session = await Sessions.GetAsync(Id);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _entries = await db.DreamEntries.AsNoTracking()
+            .Where(e => e.SleepSessionId == Id)
+            .OrderByDescending(e => e.CreatedAt)
+            .ToListAsync();
+        _lucidCount = _entries.Count(e => e.Lucidity >= LucidityLevel.BriefLucidity);
+        _cueLogs = await db.ScheduledCueLogs.AsNoTracking()
+            .Where(l => l.SleepSessionId == Id)
+            .OrderBy(l => l.ScheduledFor)
+            .ToListAsync();
+    }
+
+    private void OpenEntry(int id) => Nav.NavigateTo($"/journal/entry/{id}");
+
+    private string Duration()
+    {
+        if (_session?.EndedAt is null) return "—";
+        var d = _session.EndedAt.Value - _session.StartedAt;
+        return $"{(int)d.TotalHours}h {d.Minutes:D2}m";
+    }
+
+    private static string StatusColor(string? status) => status switch
+    {
+        CueLogStatus.Fired => "var(--lucid)",
+        CueLogStatus.Failed => "var(--warn)",
+        CueLogStatus.Scheduled => "var(--accent)",
+        _ => "var(--text-quat)",
+    };
+}

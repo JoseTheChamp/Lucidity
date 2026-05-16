@@ -1,0 +1,33 @@
+@using LucidDreamCompanion.Data.Entities
+
+@{
+    var lv = (int)Level;
+    var color = lv switch
+    {
+        0 => "var(--text-quat)",
+        1 => "var(--text-sec)",
+        2 => "var(--accent)",
+        3 => "var(--lucid)",
+        _ => "var(--lucid)"
+    };
+    var stroke = OverrideColor ?? color;
+    var radius = 2 + lv;
+}
+
+<svg width="@Size" height="@Size" viewBox="0 0 24 24" fill="none" stroke="@stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Lucidity @lv">
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+    @if (lv >= 1)
+    {
+        <circle cx="12" cy="12" r="@radius" fill="@(lv >= 3 ? stroke : "none")" stroke="@stroke"></circle>
+    }
+    @if (lv == 4)
+    {
+        <circle cx="12" cy="12" r="1" fill="#0A0E1A" stroke="none"></circle>
+    }
+</svg>
+
+@code {
+    [Parameter] public LucidityLevel Level { get; set; }
+    [Parameter] public int Size { get; set; } = 20;
+    [Parameter] public string? OverrideColor { get; set; }
+}

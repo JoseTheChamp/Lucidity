@@ -1,0 +1,31 @@
+@using LucidDreamCompanion.Data.Entities
+
+<div class="lucidity-row">
+    @foreach (var lv in Levels)
+    {
+        var active = lv == Value;
+        <button type="button" class="@(active ? "active" : "")" @onclick="() => Set(lv)">
+            <LucidityEye Level="lv" Size="20" OverrideColor="@(active ? "var(--accent)" : null)" />
+            <span class="ll-label">@LabelFor(lv)</span>
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public LucidityLevel Value { get; set; }
+    [Parameter] public EventCallback<LucidityLevel> ValueChanged { get; set; }
+
+    private static readonly LucidityLevel[] Levels = Enum.GetValues<LucidityLevel>();
+
+    private Task Set(LucidityLevel lv) => ValueChanged.InvokeAsync(lv);
+
+    private static string LabelFor(LucidityLevel lv) => lv switch
+    {
+        LucidityLevel.None => "NONE",
+        LucidityLevel.FaintAwareness => "FAINT",
+        LucidityLevel.BriefLucidity => "BRIEF",
+        LucidityLevel.SustainedLucidity => "SUSTAIN",
+        LucidityLevel.FullControl => "FULL",
+        _ => "—"
+    };
+}

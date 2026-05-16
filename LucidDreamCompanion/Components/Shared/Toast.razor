@@ -1,0 +1,67 @@
+@implements IDisposable
+
+@if (_visible)
+{
+    <div class="toast @(_showing ? "show" : "") @(_action is not null ? "action" : "")">
+        @_message
+        @if (_action is not null)
+        {
+            <button @onclick="OnAction">@_actionLabel</button>
+        }
+    </div>
+}
+
+@code {
+    private string _message = "";
+    private bool _visible;
+    private bool _showing;
+    private string? _actionLabel;
+    private Func<Task>? _action;
+    private CancellationTokenSource? _cts;
+
+    public async Task Show(string message, int durationMs = 1400)
+    {
+        await ShowCore(message, durationMs, null, null);
+    }
+
+    public async Task ShowAction(string message, string actionLabel, Func<Task> onAction, int durationMs = 5000)
+    {
+        await ShowCore(message, durationMs, actionLabel, onAction);
+    }
+
+    private async Task ShowCore(string message, int durationMs, string? actionLabel, Func<Task>? action)
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        _message = message;
+        _actionLabel = actionLabel;
+        _action = action;
+        _visible = true;
+        StateHasChanged();
+        await Task.Delay(10, CancellationToken.None);
+        _showing = true;
+        StateHasChanged();
+        try { await Task.Delay(durationMs, token); }
+        catch (TaskCanceledException) { return; }
+        _showing = false;
+        StateHasChanged();
+        try { await Task.Delay(220, token); }
+        catch (TaskCanceledException) { return; }
+        _visible = false;
+        StateHasChanged();
+    }
+
+    private async Task OnAction()
+    {
+        var act = _action;
+        _cts?.Cancel();
+        _showing = false;
+        _visible = false;
+        StateHasChanged();
+        if (act is not null) await act();
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

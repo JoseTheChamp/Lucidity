@@ -1,0 +1,32 @@
+@page "/settings"
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <div>
+            <span class="subtitle">Preferences</span>
+            <h1>Settings</h1>
+        </div>
+    </header>
+    <div class="settings-list">
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/settings/tags")'>
+            <span class="label">Tags</span>
+            <span class="meta">Manage</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/settings/notifications")'>
+            <span class="label">Notifications</span>
+            <span class="meta">Reminders & reality checks</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/settings/voice")'>
+            <span class="label">Voice journaling</span>
+            <span class="meta">Recognition language</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" style="opacity:0.5;cursor:default">
+            <span class="label">Export / Import</span>
+            <span class="meta">Phase 9</span>
+        </div>
+    </div>
+</div>

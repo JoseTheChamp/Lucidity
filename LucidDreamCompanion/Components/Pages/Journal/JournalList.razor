@@ -1,0 +1,241 @@
+@page "/"
+@page "/journal"
+@implements IDisposable
+@inject IDreamJournalService Journal
+@inject ITagService TagService
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <div>
+            <span class="subtitle">Journal</span>
+            <h1>
+                Dreams
+                <span class="count">@_entries.Count.ToString("D3")</span>
+            </h1>
+        </div>
+        <button class="btn btn-primary" @onclick="NewEntry">+ New</button>
+    </header>
+
+    <div class="search-bar">
+        <div class="search-input">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input placeholder="Search dreams…" @bind="_search" @bind:event="oninput" @bind:after="Reload" />
+        </div>
+        <button class="filter-toggle @(_filtersOpen ? "open" : "")" @onclick="() => _filtersOpen = !_filtersOpen" aria-label="Filters">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+            @if (ActiveFilterCount > 0)
+            {
+                <span class="badge">@ActiveFilterCount</span>
+            }
+        </button>
+    </div>
+
+    @if (_filtersOpen)
+    {
+        <div class="filter-panel">
+            <div>
+                <div class="label-meta" style="margin-bottom:8px">Min lucidity</div>
+                <div class="lucidity-row">
+                    @foreach (var lv in Enum.GetValues<LucidityLevel>())
+                    {
+                        var active = _minLucidity == lv;
+                        <button class="@(active ? "active" : "")" @onclick="() => SetMinLucidity(lv)">
+                            <LucidityEye Level="lv" Size="18" OverrideColor="@(active ? "var(--accent)" : "var(--text-ter)")" />
+                            <span class="ll-label">@(lv == LucidityLevel.None ? "ANY" : "≥" + (int)lv)</span>
+                        </button>
+                    }
+                </div>
+            </div>
+            <div>
+                <div class="label-meta" style="margin-bottom:8px">Tag</div>
+                <div class="picker-row">
+                    @foreach (var t in _tags)
+                    {
+                        var active = _tagFilter.Contains(t.Id);
+                        <TagChip Tag="t" Active="active" OnClick="() => ToggleTagFilter(t.Id)" />
+                    }
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+                <div class="label-meta">Date</div>
+                <input type="date" @bind="_fromDate" @bind:after="Reload" />
+                <span class="label-meta">to</span>
+                <input type="date" @bind="_toDate" @bind:after="Reload" />
+            </div>
+        </div>
+    }
+
+    @if (_entries.Count == 0)
+    {
+        <EmptyState Title="No dreams logged yet"
+                    Blurb="Keep a pen and paper by your bed — or use this app within 30 seconds of waking.">
+            <button class="btn btn-primary" @onclick="NewEntry">+ New entry</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="entry-list">
+            @foreach (var group in _grouped)
+            {
+                <div>
+                    <div class="month-header">
+                        <span class="label-meta">@group.Label</span>
+                        <div class="rule"></div>
+                        <span class="count">@group.Items.Count @(group.Items.Count == 1 ? "entry" : "entries")</span>
+                    </div>
+                    <div class="entry-group">
+                        @foreach (var e in group.Items)
+                        {
+                            <div class="entry-row" @onclick="() => Open(e.Id)">
+                                <div class="gutter">
+                                    <LucidityEye Level="e.Lucidity" Size="20" />
+                                    <div class="date">@e.DreamDate.ToString("MMM dd").ToUpperInvariant()</div>
+                                </div>
+                                <div class="main">
+                                    <div class="title">@(string.IsNullOrWhiteSpace(e.Title) ? Preview(e.Body) : e.Title)</div>
+                                    <div class="body">@e.Body</div>
+                                    @if (e.Tags.Count > 0)
+                                    {
+                                        <div class="tags">
+                                            @foreach (var t in e.Tags.Take(4))
+                                            {
+                                                <TagChip Tag="t" Small="true" />
+                                            }
+                                            @if (e.Tags.Count > 4)
+                                            {
+                                                <span class="mono" style="font-size:11px;color:var(--text-ter);align-self:center">+@(e.Tags.Count - 4)</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                <button class="trash" @onclick:stopPropagation="true" @onclick="() => Delete(e)" aria-label="Delete">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<Toast @ref="_toast" />
+<ConfirmDialog @ref="_confirm" />
+
+@code {
+    private List<DreamEntry> _entries = new();
+    private List<Tag> _tags = new();
+    private string _search = "";
+    private LucidityLevel _minLucidity = LucidityLevel.None;
+    private HashSet<int> _tagFilter = new();
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private bool _filtersOpen;
+    private Toast? _toast;
+    private ConfirmDialog? _confirm;
+
+    private record Group(string Label, List<DreamEntry> Items);
+    private List<Group> _grouped = new();
+
+    private int ActiveFilterCount =>
+        (_tagFilter.Count > 0 ? 1 : 0) +
+        (_minLucidity > 0 ? 1 : 0) +
+        (_fromDate.HasValue ? 1 : 0) +
+        (_toDate.HasValue ? 1 : 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Preferences.Get("ldc.onboarding.notifications.done", false))
+        {
+            Nav.NavigateTo("/onboarding/notifications", replace: true);
+            return;
+        }
+        Journal.Changed += OnChanged;
+        _tags = (await TagService.ListAsync()).ToList();
+        await Reload();
+    }
+
+    private async void OnChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            _tags = (await TagService.ListAsync()).ToList();
+            await Reload();
+        });
+    }
+
+    private async Task Reload()
+    {
+        var q = new JournalQuery(
+            Search: string.IsNullOrWhiteSpace(_search) ? null : _search,
+            TagIds: _tagFilter.Count == 0 ? null : _tagFilter,
+            MinLucidity: _minLucidity == LucidityLevel.None ? null : _minLucidity,
+            FromDate: _fromDate,
+            ToDate: _toDate);
+        var list = await Journal.ListAsync(q);
+        _entries = list.ToList();
+        _grouped = _entries
+            .GroupBy(e => new { e.DreamDate.Year, e.DreamDate.Month })
+            .OrderByDescending(g => g.Key.Year).ThenByDescending(g => g.Key.Month)
+            .Select(g => new Group(
+                new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMMM yyyy").ToUpperInvariant(),
+                g.OrderByDescending(e => e.DreamDate).ThenByDescending(e => e.CreatedAt).ToList()))
+            .ToList();
+        StateHasChanged();
+    }
+
+    private async Task SetMinLucidity(LucidityLevel lv)
+    {
+        _minLucidity = lv;
+        await Reload();
+    }
+
+    private async Task ToggleTagFilter(int id)
+    {
+        if (!_tagFilter.Add(id)) _tagFilter.Remove(id);
+        await Reload();
+    }
+
+    private async Task NewEntry()
+    {
+        var e = await Journal.CreateAsync();
+        Nav.NavigateTo($"/journal/edit/{e.Id}?fresh=1");
+    }
+
+    private void Open(int id) => Nav.NavigateTo($"/journal/entry/{id}");
+
+    private async Task Delete(DreamEntry e)
+    {
+        if (_confirm is null) return;
+        var title = string.IsNullOrWhiteSpace(e.Title) ? Preview(e.Body) : e.Title;
+        var ok = await _confirm.ShowAsync(
+            "Delete this dream?",
+            $"“{title}” from {e.DreamDate:MMM d, yyyy} will be removed. You'll have a few seconds to undo.",
+            "Delete");
+        if (!ok) return;
+
+        var tagIds = e.Tags.Select(t => t.Id).ToList();
+        await Journal.DeleteAsync(e.Id);
+        if (_toast is not null)
+        {
+            await _toast.ShowAction("Entry deleted", "Undo", async () =>
+            {
+                await Journal.RestoreAsync(e, tagIds);
+            });
+        }
+    }
+
+    private static string Preview(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return "(untitled)";
+        var trimmed = body.Trim();
+        return trimmed.Length > 60 ? trimmed[..60] + "…" : trimmed;
+    }
+
+    public void Dispose()
+    {
+        Journal.Changed -= OnChanged;
+    }
+}

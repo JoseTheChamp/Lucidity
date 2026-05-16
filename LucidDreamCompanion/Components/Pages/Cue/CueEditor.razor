@@ -1,0 +1,271 @@
+@page "/cues/profiles/{ProfileId:int}/cue/{CueId:int}"
+@using Microsoft.EntityFrameworkCore
+@using LucidDreamCompanion.Data
+@inject ICueProfileService Profiles
+@inject IAudioService Audio
+@inject IDbContextFactory<LucidDbContext> DbFactory
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick="Back" aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Cue</span>
+            <h1 style="font-size:22px">Edit cue</h1>
+        </div>
+        <button class="btn btn-ghost" style="color:var(--accent)" @onclick="Save">Save</button>
+    </header>
+
+    @if (_cue is null)
+    {
+        <div class="empty"><div class="title">Loading…</div></div>
+    }
+    else
+    {
+        <div class="settings-list">
+            <div class="field">
+                <span class="field-label">Label</span>
+                <input class="input" @bind="_cue.Label" placeholder="e.g. WBTB wake-up" />
+            </div>
+
+            <div class="field">
+                <span class="field-label">Trigger mode</span>
+                <div style="display:flex;gap:6px">
+                    <button class="seg @(_cue.TriggerMode == CueTriggerMode.ClockBased ? "active" : "")"
+                            @onclick="() => _cue.TriggerMode = CueTriggerMode.ClockBased">Clock</button>
+                    <button class="seg @(_cue.TriggerMode == CueTriggerMode.Interval ? "active" : "")"
+                            @onclick="() => _cue.TriggerMode = CueTriggerMode.Interval">Interval</button>
+                    <button class="seg @(_cue.TriggerMode == CueTriggerMode.SleepRelative ? "active" : "")"
+                            @onclick="() => _cue.TriggerMode = CueTriggerMode.SleepRelative">Sleep-relative</button>
+                </div>
+                @if (_cue.TriggerMode == CueTriggerMode.SleepRelative)
+                {
+                    <div style="font-size:12px;color:var(--text-ter);margin-top:8px">Fires this long after you press "Start Sleep".</div>
+                }
+            </div>
+
+            @if (_cue.TriggerMode == CueTriggerMode.SleepRelative)
+            {
+                <div class="field">
+                    <span class="field-label">Offset from sleep start</span>
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <input type="number" min="0" max="12" class="input" style="width:80px" @bind="_offsetHours" />
+                        <span class="label-meta">h</span>
+                        <input type="number" min="0" max="59" class="input" style="width:80px" @bind="_offsetMinutes" />
+                        <span class="label-meta">m</span>
+                    </div>
+                    <div style="font-size:11.5px;color:var(--text-ter);margin-top:6px">e.g. WBTB wakes you ~5 h after sleep start.</div>
+                </div>
+            }
+            else if (_cue.TriggerMode == CueTriggerMode.ClockBased)
+            {
+                <div class="field">
+                    <span class="field-label">Fire at (clock time)</span>
+                    <input type="time" value="@FormatTime(_cue.ClockTime)" @onchange="e => _cue.ClockTime = ParseTime(e, new TimeOnly(3,0))" />
+                    <div style="font-size:11.5px;color:var(--text-ter);margin-top:6px">Times earlier than activation roll to the next day.</div>
+                </div>
+            }
+            else if (_cue.TriggerMode == CueTriggerMode.Interval)
+            {
+                <div class="field">
+                    <span class="field-label">Interval window</span>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                        <input type="time" value="@FormatTime(_cue.IntervalStart)" @onchange="e => _cue.IntervalStart = ParseTime(e, new TimeOnly(1,0))" />
+                        <span class="label-meta">to</span>
+                        <input type="time" value="@FormatTime(_cue.IntervalEnd)" @onchange="e => _cue.IntervalEnd = ParseTime(e, new TimeOnly(5,0))" />
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+                        <span class="label-meta">Every</span>
+                        <input type="number" min="5" max="600" class="input" style="width:90px" @bind="_intervalMinutes" />
+                        <span class="label-meta">minutes</span>
+                    </div>
+                    <div style="font-size:11.5px;color:var(--text-ter);margin-top:8px">
+                        Android limits exact alarms in Doze to roughly once per 9 min — keep intervals ≥ 10 min.
+                    </div>
+                </div>
+            }
+
+            <div class="field">
+                <span class="field-label">Audio</span>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <select class="input" @bind="_cue.AudioAssetId" style="flex:1">
+                        @foreach (var a in _assets)
+                        {
+                            <option value="@a.Id">@a.DisplayName</option>
+                        }
+                    </select>
+                    <button class="btn" style="padding:8px 12px" @onclick="Preview">▶ Preview</button>
+                </div>
+                @if (!string.IsNullOrEmpty(_previewStatus))
+                {
+                    <div class="label-meta" style="margin-top:6px">@_previewStatus</div>
+                }
+            </div>
+
+            <div class="field">
+                <span class="field-label">Volume · @_cue.VolumePercent%</span>
+                <input type="range" min="0" max="100" step="5" @bind="_cue.VolumePercent" @bind:event="oninput" style="width:100%" />
+            </div>
+
+            <div class="field">
+                <span class="field-label">Fade-in · @_cue.FadeInSeconds s</span>
+                <input type="range" min="0" max="30" step="1" @bind="_cue.FadeInSeconds" @bind:event="oninput" style="width:100%" />
+            </div>
+
+            <div class="field">
+                <span class="field-label">Loop count</span>
+                <input type="number" min="1" max="100" class="input" style="width:100px" @bind="_cue.LoopCount" />
+            </div>
+
+            <div class="field">
+                <span class="field-label">Vibration</span>
+                <select class="input" value="@_vibrationPreset" @onchange="OnVibrationPresetChange">
+                    <option value="">None</option>
+                    <option value="0,200">Pulse</option>
+                    <option value="0,300,150,300">Double</option>
+                    <option value="0,800">Long</option>
+                    <option value="custom">Custom…</option>
+                </select>
+                @if (_vibrationPreset == "custom")
+                {
+                    <input class="input" style="margin-top:8px" @bind="_cue.VibrationPattern" placeholder="CSV ms, e.g. 0,200,100,200" />
+                }
+            </div>
+
+            <div class="field">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <input type="checkbox" id="cueEnabled" @bind="_cue.Enabled" />
+                    <label for="cueEnabled" class="field-label" style="margin:0">Enabled</label>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" @onclick="Save">Save cue</button>
+        </div>
+    }
+</div>
+
+<style>
+.seg {
+    flex: 1;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 8px;
+    color: var(--text-sec);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.seg.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+</style>
+
+@code {
+    [Parameter] public int ProfileId { get; set; }
+    [Parameter] public int CueId { get; set; }
+
+    private AudioCue? _cue;
+    private List<AudioAsset> _assets = new();
+    private int _intervalMinutes = 30;
+    private int _offsetHours = 5;
+    private int _offsetMinutes = 0;
+    private string _vibrationPreset = "";
+    private string _previewStatus = "";
+    private int _previewHandle;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            _assets = await db.AudioAssets.AsNoTracking().OrderBy(a => a.Source).ThenBy(a => a.DisplayName).ToListAsync();
+        }
+        _cue = await Profiles.GetCueAsync(CueId);
+        if (_cue is null)
+        {
+            Nav.NavigateTo($"/cues/profiles/{ProfileId}");
+            return;
+        }
+        _intervalMinutes = (int)(_cue.IntervalEvery?.TotalMinutes ?? 30);
+        if (_cue.OffsetFromSleepStart is { } off)
+        {
+            _offsetHours = (int)off.TotalHours;
+            _offsetMinutes = off.Minutes;
+        }
+        _vibrationPreset = _cue.VibrationPattern switch
+        {
+            null or "" => "",
+            "0,200" => "0,200",
+            "0,300,150,300" => "0,300,150,300",
+            "0,800" => "0,800",
+            _ => "custom",
+        };
+        if (_cue.AudioAssetId == 0 && _assets.Count > 0) _cue.AudioAssetId = _assets[0].Id;
+    }
+
+    private void OnVibrationPresetChange(ChangeEventArgs e)
+    {
+        _vibrationPreset = e.Value?.ToString() ?? "";
+        if (_cue is null) return;
+        _cue.VibrationPattern = _vibrationPreset switch
+        {
+            "" => null,
+            "custom" => _cue.VibrationPattern,
+            var p => p,
+        };
+    }
+
+    private async Task Preview()
+    {
+        if (_cue is null) return;
+        var asset = _assets.FirstOrDefault(a => a.Id == _cue.AudioAssetId);
+        if (asset is null) { _previewStatus = "Pick an audio asset first"; return; }
+        await Audio.StopAllAsync();
+        _previewHandle = await Audio.PlayAsync(asset, new AudioPlaybackOptions
+        {
+            VolumePercent = _cue.VolumePercent,
+            FadeInSeconds = _cue.FadeInSeconds,
+            LoopCount = 1,
+            VibrationPattern = _cue.VibrationPattern,
+        });
+        _previewStatus = _previewHandle > 0 ? "Previewing…" : $"Failed — {Audio.LastError}";
+    }
+
+    private async Task Save()
+    {
+        if (_cue is null) return;
+        if (_cue.TriggerMode == CueTriggerMode.Interval)
+        {
+            _intervalMinutes = Math.Clamp(_intervalMinutes, 5, 600);
+            _cue.IntervalEvery = TimeSpan.FromMinutes(_intervalMinutes);
+            _cue.IntervalStart ??= new TimeOnly(1, 0);
+            _cue.IntervalEnd ??= new TimeOnly(5, 0);
+        }
+        if (_cue.TriggerMode == CueTriggerMode.ClockBased)
+        {
+            _cue.ClockTime ??= new TimeOnly(3, 0);
+        }
+        if (_cue.TriggerMode == CueTriggerMode.SleepRelative)
+        {
+            _offsetHours = Math.Clamp(_offsetHours, 0, 12);
+            _offsetMinutes = Math.Clamp(_offsetMinutes, 0, 59);
+            _cue.OffsetFromSleepStart = new TimeSpan(_offsetHours, _offsetMinutes, 0);
+        }
+        await Profiles.SaveCueAsync(_cue);
+        await Audio.StopAllAsync();
+        Nav.NavigateTo($"/cues/profiles/{ProfileId}");
+    }
+
+    private async Task Back()
+    {
+        await Audio.StopAllAsync();
+        Nav.NavigateTo($"/cues/profiles/{ProfileId}");
+    }
+
+    private static string FormatTime(TimeOnly? t) => (t ?? new TimeOnly(0, 0)).ToString("HH:mm");
+
+    private static TimeOnly ParseTime(ChangeEventArgs e, TimeOnly fallback)
+        => TimeOnly.TryParse(e.Value?.ToString(), out var t) ? t : fallback;
+}
