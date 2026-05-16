@@ -1,0 +1,128 @@
+@implements IDisposable
+@inject ISleepSessionService Sessions
+@inject ICueProfileService Profiles
+@inject ICueSchedulerService Scheduler
+@inject NavigationManager Nav
+
+@if (_visible && _active is not null)
+{
+    <button class="session-indicator" @onclick='() => Nav.NavigateTo("/sleep")'>
+        <div class="session-indicator-shimmer"></div>
+        <span class="session-dot" style="position:relative;z-index:1"></span>
+        <div style="display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;position:relative;z-index:1">
+            <span class="mono" style="font-size:10px;letter-spacing:0.8px;text-transform:uppercase;color:var(--lavender)">Monitoring</span>
+            <span class="mono tabular" style="font-size:12px;color:var(--text-pri)">@Elapsed</span>
+            @if (!string.IsNullOrEmpty(_profileName))
+            {
+                <span class="mono" style="font-size:10px;color:var(--text-sec);letter-spacing:0.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">· @_profileName</span>
+            }
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--lavender)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="position:relative;z-index:1"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+}
+
+@code {
+    private SleepSession? _active;
+    private string _profileName = "";
+    private bool _visible;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    private static readonly string[] HiddenRoots =
+        { "/sleep", "/onboarding", "/journal/edit", "/journal/new" };
+
+    private string Elapsed
+    {
+        get
+        {
+            if (_active is null) return "00:00:00";
+            var s = DateTime.UtcNow - _active.StartedAt;
+            if (s < TimeSpan.Zero) s = TimeSpan.Zero;
+            return $"{(int)s.TotalHours:D2}:{s.Minutes:D2}:{s.Seconds:D2}";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Sessions.Changed += OnSessionChanged;
+        Nav.LocationChanged += OnLocation;
+        await Refresh();
+    }
+
+    private async void OnSessionChanged() => await InvokeAsync(async () => { await Refresh(); StateHasChanged(); });
+
+    private void OnLocation(object? sender, LocationChangedEventArgs e)
+        => InvokeAsync(() => { UpdateVisibility(); StateHasChanged(); });
+
+    private async Task Refresh()
+    {
+        _active = await Sessions.GetActiveAsync();
+        if (_active is not null)
+        {
+            var activeProfileId = await Scheduler.GetActiveProfileIdAsync();
+            if (activeProfileId is { } pid)
+            {
+                var profiles = await Profiles.ListAsync();
+                _profileName = profiles.FirstOrDefault(p => p.Id == pid)?.Name ?? "";
+            }
+            else
+            {
+                _profileName = "";
+            }
+        }
+        UpdateVisibility();
+        EnsureTimer();
+    }
+
+    private void UpdateVisibility()
+    {
+        if (_active is null)
+        {
+            _visible = false;
+            return;
+        }
+        var path = new Uri(Nav.Uri).AbsolutePath;
+        _visible = !HiddenRoots.Any(r => path.StartsWith(r, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void EnsureTimer()
+    {
+        if (_active is not null && _timer is null)
+        {
+            _cts = new CancellationTokenSource();
+            _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            _ = TickLoop(_cts.Token);
+        }
+        else if (_active is null && _timer is not null)
+        {
+            StopTimer();
+        }
+    }
+
+    private async Task TickLoop(CancellationToken ct)
+    {
+        try
+        {
+            while (_timer is not null && await _timer.WaitForNextTickAsync(ct))
+            {
+                if (_visible) await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void StopTimer()
+    {
+        _cts?.Cancel();
+        _timer?.Dispose();
+        _timer = null;
+        _cts = null;
+    }
+
+    public void Dispose()
+    {
+        Sessions.Changed -= OnSessionChanged;
+        Nav.LocationChanged -= OnLocation;
+        StopTimer();
+    }
+}

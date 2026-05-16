@@ -85,6 +85,30 @@ public class SleepSessionService : ISleepSessionService
         Changed?.Invoke();
     }
 
+    public async Task DeleteAsync(int sessionId, CancellationToken ct = default)
+    {
+        var active = await GetActiveAsync(ct);
+
+        await using (var db = await _dbFactory.CreateDbContextAsync(ct))
+        {
+            var session = await db.SleepSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+            if (session is null) return;
+            // Linked dream entries and cue logs keep their data — the FK is configured
+            // OnDelete=SetNull, so they simply become unlinked.
+            db.SleepSessions.Remove(session);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // If the deleted session was still running, stop any cues it had armed.
+        if (active is not null && active.Id == sessionId)
+        {
+            await _scheduler.DeactivateAsync();
+        }
+
+        _logger.LogInformation("Sleep session {Id} deleted", sessionId);
+        Changed?.Invoke();
+    }
+
     public async Task<IReadOnlyList<SleepSession>> ListAsync(CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

@@ -1,0 +1,40 @@
+<div class="starfield">
+    @foreach (var s in _stars)
+    {
+        <span style="left:@(F(s.X))%;top:@(F(s.Y))%;width:@(F(s.Size))px;height:@(F(s.Size))px;background:@s.Hue;@s.Glow;animation:star-pulse @(F(s.Dur))s ease-in-out @(F(s.Delay))s infinite"></span>
+    }
+</div>
+
+@code {
+    [Parameter] public int Count { get; set; } = 60;
+
+    private record Star(double X, double Y, double Size, double Delay, double Dur, string Hue, string Glow);
+    private readonly List<Star> _stars = new();
+
+    protected override void OnInitialized()
+    {
+        // Deterministic LCG so the field doesn't reshuffle between renders.
+        long seed = 17;
+        double Rnd()
+        {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280.0;
+        }
+
+        for (var i = 0; i < Count; i++)
+        {
+            var x = Rnd() * 100;
+            var y = Rnd() * 100;
+            var size = 0.8 + Rnd() * 1.6;
+            // Slow + long-offset so the field shimmers gently rather than blinking in sync.
+            var delay = Rnd() * 9;
+            var dur = 6 + Rnd() * 9;          // 6–15s
+            var pick = Rnd();
+            var hue = pick > 0.85 ? "var(--lavender)" : pick > 0.70 ? "var(--accent)" : "#E8ECF4";
+            var glow = size > 1.6 ? $"box-shadow:0 0 {F(size * 2.4)}px {hue}" : "";
+            _stars.Add(new Star(x, y, size, delay, dur, hue, glow));
+        }
+    }
+
+    private static string F(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+}

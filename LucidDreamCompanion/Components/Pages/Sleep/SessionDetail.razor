@@ -14,6 +14,12 @@
             <span class="subtitle">Sleep session</span>
             <h1 style="font-size:22px">@(_session?.StartedAt.ToLocalTime().ToString("MMM d") ?? "…")</h1>
         </div>
+        @if (_session is not null)
+        {
+            <button class="btn btn-ghost" style="padding:10px" @onclick="Delete" aria-label="Delete session">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+            </button>
+        }
     </header>
 
     @if (_session is null)
@@ -112,6 +118,8 @@
     }
 </div>
 
+<ConfirmDialog @ref="_confirm" />
+
 @code {
     [Parameter] public int Id { get; set; }
 
@@ -119,6 +127,7 @@
     private List<DreamEntry> _entries = new();
     private List<ScheduledCueLog> _cueLogs = new();
     private int _lucidCount;
+    private ConfirmDialog? _confirm;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -136,6 +145,18 @@
     }
 
     private void OpenEntry(int id) => Nav.NavigateTo($"/journal/entry/{id}");
+
+    private async Task Delete()
+    {
+        if (_session is null || _confirm is null) return;
+        var msg = _entries.Count > 0
+            ? $"This {_session.StartedAt.ToLocalTime():MMM d} session will be removed. Its {_entries.Count} linked dream(s) are kept — they'll just no longer be tied to a session."
+            : $"This {_session.StartedAt.ToLocalTime():MMM d} session will be permanently removed.";
+        var ok = await _confirm.ShowAsync("Delete this session?", msg, "Delete");
+        if (!ok) return;
+        await Sessions.DeleteAsync(_session.Id);
+        Nav.NavigateTo("/sleep/history");
+    }
 
     private string Duration()
     {

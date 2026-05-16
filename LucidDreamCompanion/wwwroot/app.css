@@ -14,18 +14,26 @@
   flex-direction: column;
 }
 
+/* Safe-area insets — native code sets --safe-top / --safe-bottom from window insets;
+   env() is the fallback for the first frame / non-Android. */
+:root {
+  --inset-top: max(env(safe-area-inset-top, 0px), var(--safe-top, 0px));
+  --inset-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom, 0px));
+}
+
 .app-shell {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  padding-top: var(--inset-top);
 }
 
 .screen {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: calc(var(--nav-h) + 8px);
+  padding-bottom: calc(var(--nav-h) + 8px + var(--inset-bottom));
 }
 .screen::-webkit-scrollbar { width: 0; height: 0; }
 .screen { scrollbar-width: none; }
@@ -62,12 +70,12 @@
 
 .bottom-nav {
   position: relative;
-  height: var(--nav-h);
+  min-height: var(--nav-h);
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   background: linear-gradient(180deg, rgba(10,14,26,0.85), rgba(0,0,0,0.95));
   border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-bottom: var(--inset-bottom);
 }
 .bottom-nav .nav-item {
   display: flex;
@@ -472,6 +480,160 @@ a:hover { color: var(--accent); filter: brightness(1.1); }
 @keyframes confetti-fall {
   0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
   100% { transform: translateY(110vh) rotate(540deg); opacity: 0.9; }
+}
+
+/* ─── Ambient sleep-session screen ─────────────────────────── */
+.session-ambient {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #060814 0%, #02030a 80%, #000 100%);
+}
+.starfield {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.starfield span {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.4;
+  will-change: opacity;
+}
+/* Gentle, slow shimmer — the box-shadow glow fades with the element's opacity. */
+@keyframes star-pulse {
+  0%, 100% { opacity: 0.18; }
+  50%      { opacity: 0.72; }
+}
+.session-aura {
+  position: absolute;
+  top: 32%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(107,138,255,0.08) 40%, transparent 70%);
+  animation: breathe 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+.session-content {
+  position: relative;
+  z-index: 5;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+}
+.session-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lavender);
+  box-shadow: 0 0 12px var(--lavender);
+  animation: breathe 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.session-timer {
+  font-size: 64px;
+  font-weight: 200;
+  color: var(--text-pri);
+  letter-spacing: -2px;
+  line-height: 1;
+  text-shadow: 0 0 40px rgba(107,138,255,0.25);
+}
+.session-secs {
+  color: var(--text-ter);
+  font-size: 48px;
+}
+.next-cue-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(107,138,255,0.10), rgba(19,24,41,0.7));
+  border: 1px solid rgba(107,138,255,0.25);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.next-cue-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(107,138,255,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  animation: breathe 3.6s ease-in-out infinite;
+}
+.cue-timeline {
+  position: relative;
+  height: 28px;
+}
+.cue-track {
+  position: absolute;
+  top: 13px; left: 0; right: 0;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+}
+.cue-progress {
+  position: absolute;
+  top: 13px; left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--lavender), var(--accent));
+  border-radius: 1px;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.cue-now {
+  position: absolute;
+  top: 8px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 4px rgba(107,138,255,0.18), 0 0 12px var(--accent-glow);
+}
+.cue-tick {
+  position: absolute;
+  top: 10px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-2);
+  border: 1.5px solid var(--border-2);
+}
+.cue-tick.fired {
+  background: var(--lucid);
+  border-color: var(--lucid);
+}
+
+/* ─── Global "monitoring" session indicator bar ────────────── */
+.session-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 16px;
+  background: linear-gradient(180deg, rgba(167,139,250,0.16), rgba(107,138,255,0.08));
+  border: none;
+  border-bottom: 1px solid rgba(167,139,250,0.25);
+  cursor: pointer;
+  color: var(--text-pri);
+  font-family: var(--font-sans);
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.session-indicator-shimmer {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 100% at 0% 50%, rgba(167,139,250,0.14), transparent 60%);
+  pointer-events: none;
 }
 
 /* Modal */

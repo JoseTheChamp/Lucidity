@@ -11,6 +11,7 @@ public interface ISleepSessionService
     Task<SleepSession?> GetActiveAsync(CancellationToken ct = default);
     Task<SleepSession> StartAsync(int? cueProfileId, CancellationToken ct = default);
     Task EndAsync(int sessionId, int? quality, string? notes, CancellationToken ct = default);
+    Task DeleteAsync(int sessionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<SleepSession>> ListAsync(CancellationToken ct = default);
     Task<SleepSession?> GetAsync(int id, CancellationToken ct = default);

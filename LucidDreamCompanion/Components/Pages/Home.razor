@@ -33,7 +33,25 @@
                     </div>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
                 </div>
-                <div style="display:flex;justify-content:space-between;margin-top:12px">
+
+                <div style="margin-top:6px;overflow:hidden">
+                    <svg viewBox="0 0 320 38" width="100%" height="38" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.28" />
+                                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+                            </linearGradient>
+                        </defs>
+                        <polyline points="@SparkAreaPoints" fill="url(#spark-fill)" stroke="none" />
+                        <polyline points="@SparkLinePoints" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                        @foreach (var dot in SparkDots)
+                        {
+                            <circle cx="@dot.X" cy="@dot.Y" r="1.9" fill="var(--lucid)" />
+                        }
+                    </svg>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;margin-top:6px">
                     <div>
                         <div class="label-meta">Longest</div>
                         <div class="mono tabular" style="margin-top:4px;font-size:13px">@_snapshot.LongestStreak nights</div>
@@ -209,6 +227,49 @@
     }
 
     private static string Pct(double rate) => $"{Math.Round(rate * 100)}%";
+
+    // ─── Streak sparkline (last 14 nights, max lucidity per night) ───
+    private const double SparkW = 320, SparkH = 38;
+
+    private List<int> SparkData => _snapshot is null
+        ? new()
+        : _snapshot.Heatmap.TakeLast(14).Select(d => Math.Max(0, d.MaxLucidity)).ToList();
+
+    private string SparkLinePoints => string.Join(" ", SparkPoints());
+
+    private string SparkAreaPoints
+    {
+        get
+        {
+            var pts = SparkPoints();
+            return pts.Count == 0 ? "" : $"0,{F(SparkH)} {string.Join(" ", pts)} {F(SparkW)},{F(SparkH)}";
+        }
+    }
+
+    private IEnumerable<(double X, double Y)> SparkDots
+    {
+        get
+        {
+            var data = SparkData;
+            if (data.Count < 2) yield break;
+            var step = SparkW / (data.Count - 1);
+            for (var i = 0; i < data.Count; i++)
+            {
+                if (data[i] >= 2)
+                    yield return (i * step, SparkH - data[i] / 4.0 * SparkH);
+            }
+        }
+    }
+
+    private List<string> SparkPoints()
+    {
+        var data = SparkData;
+        if (data.Count < 2) return new();
+        var step = SparkW / (data.Count - 1);
+        return data.Select((v, i) => $"{F(i * step)},{F(SparkH - v / 4.0 * SparkH)}").ToList();
+    }
+
+    private static string F(double v) => v.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
 
     private async Task QuickAdd()
     {
