@@ -24,9 +24,15 @@
             <span class="meta">Recognition language</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
         </div>
-        <div class="settings-item" style="opacity:0.5;cursor:default">
-            <span class="label">Export / Import</span>
-            <span class="meta">Phase 9</span>
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/settings/data")'>
+            <span class="label">Data &amp; backup</span>
+            <span class="meta">Export · import · reset</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/settings/about")'>
+            <span class="label">About</span>
+            <span class="meta">Version &amp; info</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
         </div>
     </div>
 </div>

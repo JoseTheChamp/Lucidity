@@ -1,4 +1,3 @@
-@page "/"
 @page "/journal"
 @implements IDisposable
 @inject IDreamJournalService Journal
@@ -76,47 +75,45 @@
     else
     {
         <div class="entry-list">
-            @foreach (var group in _grouped)
-            {
-                <div>
+            <Virtualize Items="_rows" Context="row" ItemSize="96" OverscanCount="6">
+                @if (row.Header is not null)
+                {
                     <div class="month-header">
-                        <span class="label-meta">@group.Label</span>
+                        <span class="label-meta">@row.Header</span>
                         <div class="rule"></div>
-                        <span class="count">@group.Items.Count @(group.Items.Count == 1 ? "entry" : "entries")</span>
+                        <span class="count">@row.HeaderCount @(row.HeaderCount == 1 ? "entry" : "entries")</span>
                     </div>
-                    <div class="entry-group">
-                        @foreach (var e in group.Items)
-                        {
-                            <div class="entry-row" @onclick="() => Open(e.Id)">
-                                <div class="gutter">
-                                    <LucidityEye Level="e.Lucidity" Size="20" />
-                                    <div class="date">@e.DreamDate.ToString("MMM dd").ToUpperInvariant()</div>
-                                </div>
-                                <div class="main">
-                                    <div class="title">@(string.IsNullOrWhiteSpace(e.Title) ? Preview(e.Body) : e.Title)</div>
-                                    <div class="body">@e.Body</div>
-                                    @if (e.Tags.Count > 0)
+                }
+                else if (row.Entry is { } e)
+                {
+                    <div class="entry-row" style="margin-bottom:8px" @onclick="() => Open(e.Id)">
+                        <div class="gutter">
+                            <LucidityEye Level="e.Lucidity" Size="20" />
+                            <div class="date">@e.DreamDate.ToString("MMM dd").ToUpperInvariant()</div>
+                        </div>
+                        <div class="main">
+                            <div class="title">@(string.IsNullOrWhiteSpace(e.Title) ? Preview(e.Body) : e.Title)</div>
+                            <div class="body">@e.Body</div>
+                            @if (e.Tags.Count > 0)
+                            {
+                                <div class="tags">
+                                    @foreach (var t in e.Tags.Take(4))
                                     {
-                                        <div class="tags">
-                                            @foreach (var t in e.Tags.Take(4))
-                                            {
-                                                <TagChip Tag="t" Small="true" />
-                                            }
-                                            @if (e.Tags.Count > 4)
-                                            {
-                                                <span class="mono" style="font-size:11px;color:var(--text-ter);align-self:center">+@(e.Tags.Count - 4)</span>
-                                            }
-                                        </div>
+                                        <TagChip Tag="t" Small="true" />
+                                    }
+                                    @if (e.Tags.Count > 4)
+                                    {
+                                        <span class="mono" style="font-size:11px;color:var(--text-ter);align-self:center">+@(e.Tags.Count - 4)</span>
                                     }
                                 </div>
-                                <button class="trash" @onclick:stopPropagation="true" @onclick="() => Delete(e)" aria-label="Delete">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
-                                </button>
-                            </div>
-                        }
+                            }
+                        </div>
+                        <button class="trash" @onclick:stopPropagation="true" @onclick="() => Delete(e)" aria-label="Delete entry">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                        </button>
                     </div>
-                </div>
-            }
+                }
+            </Virtualize>
         </div>
     }
 </div>
@@ -136,8 +133,9 @@
     private Toast? _toast;
     private ConfirmDialog? _confirm;
 
-    private record Group(string Label, List<DreamEntry> Items);
-    private List<Group> _grouped = new();
+    // A virtualized flat list: each row is either a month header or an entry.
+    private record Row(string? Header, int HeaderCount, DreamEntry? Entry);
+    private List<Row> _rows = new();
 
     private int ActiveFilterCount =>
         (_tagFilter.Count > 0 ? 1 : 0) +
@@ -147,11 +145,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (!Preferences.Get("ldc.onboarding.notifications.done", false))
-        {
-            Nav.NavigateTo("/onboarding/notifications", replace: true);
-            return;
-        }
         Journal.Changed += OnChanged;
         _tags = (await TagService.ListAsync()).ToList();
         await Reload();
@@ -176,13 +169,18 @@
             ToDate: _toDate);
         var list = await Journal.ListAsync(q);
         _entries = list.ToList();
-        _grouped = _entries
+
+        _rows = new List<Row>();
+        var groups = _entries
             .GroupBy(e => new { e.DreamDate.Year, e.DreamDate.Month })
-            .OrderByDescending(g => g.Key.Year).ThenByDescending(g => g.Key.Month)
-            .Select(g => new Group(
-                new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMMM yyyy").ToUpperInvariant(),
-                g.OrderByDescending(e => e.DreamDate).ThenByDescending(e => e.CreatedAt).ToList()))
-            .ToList();
+            .OrderByDescending(g => g.Key.Year).ThenByDescending(g => g.Key.Month);
+        foreach (var g in groups)
+        {
+            var items = g.OrderByDescending(e => e.DreamDate).ThenByDescending(e => e.CreatedAt).ToList();
+            var label = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMMM yyyy").ToUpperInvariant();
+            _rows.Add(new Row(label, items.Count, null));
+            foreach (var e in items) _rows.Add(new Row(null, 0, e));
+        }
         StateHasChanged();
     }
 

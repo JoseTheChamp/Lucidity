@@ -1,4 +1,5 @@
 @page "/stats"
+@inject IStatsService StatsSvc
 
 <div class="screen screen-enter">
     <header class="appbar">
@@ -7,6 +8,283 @@
             <h1>Stats</h1>
         </div>
     </header>
-    <EmptyState Title="Coming in Phase 8"
-                Blurb="Streaks, lucidity rate, heatmaps and technique comparisons land here." />
+
+    @if (_snapshot is null)
+    {
+        <div class="empty"><div class="title">Crunching numbers…</div></div>
+    }
+    else
+    {
+        <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:var(--gap)">
+
+            <!-- Hero streak -->
+            <div class="card" style="position:relative;overflow:hidden">
+                <div style="position:absolute;right:-40px;top:-40px;width:180px;height:180px;background:radial-gradient(circle,var(--accent-soft) 0%,transparent 70%);pointer-events:none"></div>
+                <div class="label-meta">Current streak</div>
+                <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px">
+                    <span style="font-size:20px">🔥</span>
+                    <span class="mono tabular" style="font-size:var(--fs-hero);font-weight:300;letter-spacing:-1px;line-height:1">@_snapshot.CurrentStreak</span>
+                    <span style="font-size:14px;color:var(--text-sec)">@(_snapshot.CurrentStreak == 1 ? "night" : "nights")</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:14px">
+                    <div>
+                        <div class="label-meta">Longest</div>
+                        <div class="mono tabular" style="margin-top:4px;font-size:14px">@_snapshot.LongestStreak nights</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div class="label-meta">Lucidity · 30d</div>
+                        <div class="mono tabular" style="margin-top:4px;font-size:14px;color:var(--lucid)">@Pct(_snapshot.LucidityRate30d)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Big numbers -->
+            <div class="card">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                    <div>
+                        <div class="label-meta">Dreams</div>
+                        <div class="mono tabular" style="font-size:24px;margin-top:4px">@_snapshot.TotalEntries</div>
+                    </div>
+                    <div>
+                        <div class="label-meta">Lucid</div>
+                        <div class="mono tabular" style="font-size:24px;margin-top:4px;color:var(--lucid)">@_snapshot.TotalLucid</div>
+                    </div>
+                    <div>
+                        <div class="label-meta">Lucidity</div>
+                        <div class="mono tabular" style="font-size:24px;margin-top:4px">@Pct(_snapshot.LucidityRate)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heatmap -->
+            <div class="card">
+                <div class="label-meta" style="margin-bottom:12px">Last 90 nights</div>
+                <div class="heatmap">
+                    @for (var i = 0; i < _leadingBlanks; i++)
+                    {
+                        <div class="heat-cell" style="background:transparent"></div>
+                    }
+                    @foreach (var day in _snapshot.Heatmap)
+                    {
+                        <div class="heat-cell" style="background:@HeatColor(day.MaxLucidity)"
+                             title="@day.Date.ToString("MMM d")"></div>
+                    }
+                </div>
+                <div style="display:flex;align-items:center;gap:5px;margin-top:12px;justify-content:flex-end">
+                    <span class="label-meta">less</span>
+                    @for (var lv = -1; lv <= 4; lv++)
+                    {
+                        <span class="heat-legend" style="background:@HeatColor(lv)"></span>
+                    }
+                    <span class="label-meta">lucid</span>
+                </div>
+            </div>
+
+            <!-- Trend line -->
+            <div class="card">
+                <div class="label-meta" style="margin-bottom:10px">Lucidity rate · rolling 30 days</div>
+                @if (_snapshot.Trend.All(t => t.Rate == 0))
+                {
+                    <div style="font-size:13px;color:var(--text-ter)">Log a few lucid dreams to see your trend.</div>
+                }
+                else
+                {
+                    <svg viewBox="0 0 300 90" width="100%" height="90" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.28" />
+                                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+                            </linearGradient>
+                        </defs>
+                        <polyline points="@AreaPoints" fill="url(#trend-fill)" stroke="none" />
+                        <polyline points="@LinePoints" fill="none" stroke="var(--accent)" stroke-width="2"
+                                  stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <div style="display:flex;justify-content:space-between;margin-top:4px">
+                        <span class="label-meta">12 wk ago</span>
+                        <span class="label-meta">now</span>
+                    </div>
+                }
+            </div>
+
+            <!-- Top tags -->
+            <div class="card">
+                <div class="label-meta" style="margin-bottom:12px">Top tags</div>
+                @if (_snapshot.TopTags.Count == 0)
+                {
+                    <div style="font-size:13px;color:var(--text-ter)">No tags used yet.</div>
+                }
+                else
+                {
+                    @foreach (var tag in _snapshot.TopTags)
+                    {
+                        <div style="margin-bottom:10px">
+                            <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px">
+                                <span style="display:flex;align-items:center;gap:6px">
+                                    <span style="width:7px;height:7px;border-radius:50%;background:@tag.ColorHex"></span>
+                                    @tag.Name
+                                </span>
+                                <span class="mono" style="color:var(--text-ter)">@tag.Count</span>
+                            </div>
+                            <div class="tag-bar-track">
+                                <div class="tag-bar-fill" style="width:@(BarWidth(tag.Count))%;background:@tag.ColorHex"></div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Technique comparison -->
+            <div class="card">
+                <div class="label-meta" style="margin-bottom:12px">Technique comparison</div>
+                @if (_snapshot.Techniques.Count == 0)
+                {
+                    <div style="font-size:13px;color:var(--text-ter)">Run a sleep session with a cue profile to compare techniques.</div>
+                }
+                else
+                {
+                    <div class="tech-table">
+                        <div class="tech-row tech-head">
+                            <span>Profile</span>
+                            <span>Nights</span>
+                            <span>Dreams</span>
+                            <span>Lucidity</span>
+                        </div>
+                        @foreach (var t in _snapshot.Techniques)
+                        {
+                            <div class="tech-row">
+                                <span style="color:var(--text-pri)">@t.Name</span>
+                                <span class="mono">@t.Sessions</span>
+                                <span class="mono">@t.Dreams</span>
+                                <span class="mono" style="color:var(--lucid)">@Pct(t.LucidityRate)</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Reality checks -->
+            <div class="card">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div>
+                        <div class="label-meta">Reality checks · 7 days</div>
+                        <div class="mono tabular" style="font-size:18px;margin-top:4px">@_snapshot.RealityChecks7d completed</div>
+                    </div>
+                    @if (_snapshot.RealityCheckRate7d is { } rate)
+                    {
+                        <span class="pill" style="border-color:rgba(167,139,250,0.35);color:var(--lavender)">@Pct(rate)</span>
+                    }
+                    else
+                    {
+                        <span class="pill">disabled</span>
+                    }
+                </div>
+            </div>
+
+        </div>
+    }
 </div>
+
+<style>
+.heatmap {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(7, 1fr);
+    gap: 3px;
+}
+.heat-cell {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 2px;
+    min-width: 8px;
+}
+.heat-legend {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+.tag-bar-track {
+    height: 8px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.tag-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    min-width: 4px;
+    transition: width 300ms ease;
+}
+.tech-table { display: flex; flex-direction: column; gap: 2px; }
+.tech-row {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    gap: 6px;
+    padding: 8px 4px;
+    font-size: 13px;
+    color: var(--text-sec);
+    border-bottom: 1px solid var(--border);
+}
+.tech-row:last-child { border-bottom: none; }
+.tech-head {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-ter);
+}
+.tech-row span:not(:first-child) { text-align: right; }
+</style>
+
+@code {
+    private StatsSnapshot? _snapshot;
+    private int _leadingBlanks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _snapshot = await StatsSvc.GetSnapshotAsync();
+        if (_snapshot.Heatmap.Count > 0)
+        {
+            // Sunday=0 … align the first cell into its weekday row.
+            _leadingBlanks = (int)_snapshot.Heatmap[0].Date.DayOfWeek;
+        }
+    }
+
+    private static string Pct(double rate) => $"{Math.Round(rate * 100)}%";
+
+    private int BarWidth(int count)
+    {
+        var max = _snapshot?.TopTags.Count > 0 ? _snapshot.TopTags.Max(t => t.Count) : 1;
+        return max == 0 ? 0 : (int)Math.Round((double)count / max * 100);
+    }
+
+    private static string HeatColor(int maxLucidity) => maxLucidity switch
+    {
+        < 0 => "rgba(255,255,255,0.035)",
+        0   => "rgba(107,138,255,0.20)",
+        1   => "rgba(107,138,255,0.42)",
+        2   => "rgba(107,138,255,0.72)",
+        3   => "rgba(94,234,212,0.62)",
+        _   => "rgba(94,234,212,1.0)",
+    };
+
+    private string LinePoints => BuildPoints(area: false);
+    private string AreaPoints => BuildPoints(area: true);
+
+    private string BuildPoints(bool area)
+    {
+        if (_snapshot is null || _snapshot.Trend.Count == 0) return "";
+        var n = _snapshot.Trend.Count;
+        const double w = 300, h = 90;
+        var step = n > 1 ? w / (n - 1) : w;
+        var pts = _snapshot.Trend
+            .Select((t, i) => $"{i * step:0.#},{h - t.Rate * h:0.#}")
+            .ToList();
+        if (area)
+        {
+            return $"0,{h} {string.Join(" ", pts)} {w},{h}";
+        }
+        return string.Join(" ", pts);
+    }
+}

@@ -1,0 +1,79 @@
+@page "/techniques"
+@inject ITechniqueTemplateService Library
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/cues")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Cues</span>
+            <h1 style="font-size:22px">Techniques</h1>
+        </div>
+    </header>
+
+    <div style="padding:0 var(--pad-x) 24px">
+        <div style="font-size:13px;color:var(--text-sec);line-height:1.5;margin-bottom:16px">
+            Proven lucid-dreaming methods. Each is a ready-made cue profile — activate one for tonight,
+            or duplicate it to make your own editable version.
+        </div>
+        <div class="technique-grid">
+            @foreach (var t in Library.Definitions)
+            {
+                <div class="technique-card" @onclick="() => Open(t.Key)">
+                    <div class="technique-key">@t.Key</div>
+                    <div class="technique-name">@t.Tagline</div>
+                    <div class="technique-meta">
+                        @(t.Cues.Length == 0 ? "No audio cues" : $"{t.Cues.Length} cue{(t.Cues.Length == 1 ? "" : "s")}")
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+.technique-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gap-sm);
+}
+.technique-card {
+    background: linear-gradient(180deg, rgba(26,32,56,0.55) 0%, rgba(19,24,41,0.85) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 14px;
+    cursor: pointer;
+    transition: border-color 120ms ease, transform 80ms ease;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+}
+.technique-card:active { transform: scale(0.98); }
+.technique-card:hover { border-color: var(--border-2); }
+.technique-key {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+}
+.technique-name {
+    font-size: 13px;
+    color: var(--text-pri);
+    margin-top: 6px;
+    flex: 1;
+}
+.technique-meta {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-ter);
+    margin-top: 8px;
+}
+</style>
+
+@code {
+    private void Open(string key) => Nav.NavigateTo($"/techniques/{key}");
+}

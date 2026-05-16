@@ -1,0 +1,48 @@
+@implements IDisposable
+
+@if (_visible)
+{
+    <div class="confetti-layer">
+        @for (var i = 0; i < 40; i++)
+        {
+            <span class="confetti-piece" style="@PieceStyle(i)"></span>
+        }
+    </div>
+}
+
+@code {
+    private bool _visible;
+    private CancellationTokenSource? _cts;
+
+    private static readonly string[] Colors =
+        { "#6B8AFF", "#5EEAD4", "#A78BFA", "#FBBF24", "#F472B6" };
+
+    public async Task Celebrate(int durationMs = 2600)
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+        _visible = true;
+        StateHasChanged();
+        try { await Task.Delay(durationMs, token); }
+        catch (TaskCanceledException) { return; }
+        _visible = false;
+        StateHasChanged();
+    }
+
+    private static string PieceStyle(int i)
+    {
+        var rng = new Random(i * 7919 + 13);
+        var left = rng.Next(0, 100);
+        var delay = rng.NextDouble() * 0.8;
+        var duration = 1.8 + rng.NextDouble() * 1.0;
+        var color = Colors[i % Colors.Length];
+        var size = 6 + rng.Next(0, 6);
+        var rotate = rng.Next(0, 360);
+        return $"left:{left}%;width:{size}px;height:{size}px;background:{color};" +
+               $"animation-delay:{delay:0.00}s;animation-duration:{duration:0.00}s;" +
+               $"transform:rotate({rotate}deg)";
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

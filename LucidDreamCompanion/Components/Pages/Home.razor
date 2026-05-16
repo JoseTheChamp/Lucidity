@@ -1,0 +1,231 @@
+@page "/"
+@implements IDisposable
+@inject IStatsService Stats
+@inject IDreamJournalService Journal
+@inject ISleepSessionService Sessions
+@inject ICueProfileService Profiles
+@inject ICueSchedulerService Scheduler
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <div class="appbar">
+        <div>
+            <div class="label-meta" style="margin-bottom:6px">@DateTime.Now.ToString("ddd · MMM d").ToUpperInvariant()</div>
+            <h1 style="font-size:22px;font-weight:500">@_greeting</h1>
+        </div>
+    </div>
+
+    @if (_snapshot is not null)
+    {
+        <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:var(--gap)">
+
+            <!-- Streak -->
+            <div class="card" style="cursor:pointer;position:relative;overflow:hidden" @onclick='() => Nav.NavigateTo("/stats")'>
+                <div style="position:absolute;right:-40px;top:-40px;width:160px;height:160px;background:radial-gradient(circle,var(--accent-soft) 0%,transparent 70%);pointer-events:none"></div>
+                <div style="display:flex;align-items:flex-start;justify-content:space-between">
+                    <div>
+                        <div class="label-meta">Current streak</div>
+                        <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px">
+                            <span style="font-size:18px">🔥</span>
+                            <span class="mono tabular" style="font-size:var(--fs-hero);font-weight:300;letter-spacing:-1px;line-height:1">@_snapshot.CurrentStreak</span>
+                            <span style="font-size:14px;color:var(--text-sec)">@(_snapshot.CurrentStreak == 1 ? "night" : "nights")</span>
+                        </div>
+                    </div>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:12px">
+                    <div>
+                        <div class="label-meta">Longest</div>
+                        <div class="mono tabular" style="margin-top:4px;font-size:13px">@_snapshot.LongestStreak nights</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div class="label-meta">Lucidity · 30d</div>
+                        <div class="mono tabular" style="margin-top:4px;font-size:13px;color:var(--lucid)">@Pct(_snapshot.LucidityRate30d)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Last night -->
+            @if (_lastSession is not null)
+            {
+                <div class="card" style="cursor:pointer" @onclick="OpenLastSession">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                        <div>
+                            <div class="label-meta">Last night</div>
+                            <div style="margin-top:3px;font-size:var(--fs-title);font-weight:500">@_lastSession.StartedAt.ToLocalTime().ToString("ddd, MMM d")</div>
+                        </div>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                        <div>
+                            <div class="label-meta">Dreams</div>
+                            <div class="mono tabular" style="font-size:22px;margin-top:4px">@_lastStats.DreamCount</div>
+                        </div>
+                        <div>
+                            <div class="label-meta">Lucid</div>
+                            <div class="mono tabular" style="font-size:22px;margin-top:4px;color:var(--lucid)">@_lastStats.LucidCount</div>
+                        </div>
+                        <div>
+                            <div class="label-meta">Quality</div>
+                            <div class="mono tabular" style="font-size:22px;margin-top:4px">@(_lastSession.Quality?.ToString() ?? "—")</div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Active profile -->
+            <div class="card" style="cursor:pointer;@(_activeProfile is not null ? "border-color:rgba(167,139,250,0.35)" : "")" @onclick='() => Nav.NavigateTo("/cues")'>
+                <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:34px;height:34px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--border-2);display:flex;align-items:center;justify-content:center">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                    </div>
+                    <div style="flex:1">
+                        <div class="label-meta">Active profile</div>
+                        <div style="margin-top:2px;font-size:14px;font-weight:500">@(_activeProfile?.Name ?? "None — tap to choose")</div>
+                    </div>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
+            </div>
+
+            <!-- Quick actions -->
+            <div style="display:flex;gap:10px">
+                <button class="btn btn-primary" style="flex:1;padding:14px" @onclick="QuickAdd">+ New dream</button>
+                <button class="btn" style="flex:1;padding:14px" @onclick='() => Nav.NavigateTo("/sleep")'>Sleep</button>
+            </div>
+
+            <!-- Recent dreams -->
+            @if (_recent.Count > 0)
+            {
+                <div>
+                    <div class="month-header">
+                        <span class="label-meta">Recent dreams</span>
+                        <div class="rule"></div>
+                        <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px;color:var(--text-sec)" @onclick='() => Nav.NavigateTo("/journal")'>All →</button>
+                    </div>
+                    <div class="entry-group">
+                        @foreach (var e in _recent)
+                        {
+                            <div class="entry-row" @onclick="() => OpenEntry(e.Id)">
+                                <div class="gutter"><LucidityEye Level="e.Lucidity" Size="20" /></div>
+                                <div class="main">
+                                    <div class="title">@(string.IsNullOrWhiteSpace(e.Title) ? "(untitled)" : e.Title)</div>
+                                    <div class="body">@e.Body</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<Confetti @ref="_confetti" />
+<Toast @ref="_toast" />
+
+@code {
+    private StatsSnapshot? _snapshot;
+    private SleepSession? _lastSession;
+    private SessionStats _lastStats = new(0, 0);
+    private CueProfile? _activeProfile;
+    private List<DreamEntry> _recent = new();
+    private string _greeting = "";
+    private Confetti? _confetti;
+    private Toast? _toast;
+
+    private static readonly int[] Milestones = { 3, 7, 14, 30, 60, 100 };
+
+    protected override void OnInitialized()
+    {
+        if (NeedsOnboarding())
+        {
+            Nav.NavigateTo("/onboarding/welcome", replace: true);
+            return;
+        }
+        Journal.Changed += OnChanged;
+        Sessions.Changed += OnChanged;
+        Scheduler.ActiveProfileChanged += OnChanged;
+    }
+
+    // Existing pre-Phase-9 users already finished the old onboarding (notifications flag set),
+    // so don't drag them back through the new 4-screen flow.
+    private static bool NeedsOnboarding()
+        => !Preferences.Get("ldc.onboarding.done", false)
+           && !Preferences.Get("ldc.onboarding.notifications.done", false);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (NeedsOnboarding()) return;
+        _greeting = Greeting();
+        await Reload();
+        await CheckMilestone();
+    }
+
+    private async void OnChanged() => await InvokeAsync(async () => { await Reload(); StateHasChanged(); });
+
+    private async Task Reload()
+    {
+        _snapshot = await Stats.GetSnapshotAsync();
+        var sessions = await Sessions.ListAsync();
+        _lastSession = sessions.FirstOrDefault(s => s.EndedAt != null);
+        if (_lastSession is not null)
+            _lastStats = await Sessions.GetStatsAsync(_lastSession.Id);
+        var activeId = await Scheduler.GetActiveProfileIdAsync();
+        if (activeId is { } id)
+        {
+            var profiles = await Profiles.ListAsync();
+            _activeProfile = profiles.FirstOrDefault(p => p.Id == id);
+        }
+        else
+        {
+            _activeProfile = null;
+        }
+        _recent = (await Journal.ListAsync()).Take(3).ToList();
+    }
+
+    private async Task CheckMilestone()
+    {
+        if (_snapshot is null) return;
+        var streak = _snapshot.CurrentStreak;
+        var lastCelebrated = Preferences.Get("ldc.streak.celebrated", 0);
+        if (streak < lastCelebrated)
+        {
+            Preferences.Set("ldc.streak.celebrated", streak);
+            return;
+        }
+        if (streak > lastCelebrated && Milestones.Contains(streak))
+        {
+            Preferences.Set("ldc.streak.celebrated", streak);
+            if (_confetti is not null) _ = _confetti.Celebrate();
+            if (_toast is not null) await _toast.Show($"{streak}-night streak!", 2600);
+        }
+    }
+
+    private static string Greeting()
+    {
+        var h = DateTime.Now.Hour;
+        var part = h < 12 ? "morning" : h < 18 ? "afternoon" : "evening";
+        return $"Good {part}, Josef";
+    }
+
+    private static string Pct(double rate) => $"{Math.Round(rate * 100)}%";
+
+    private async Task QuickAdd()
+    {
+        var entry = await Journal.CreateAsync();
+        Nav.NavigateTo($"/journal/edit/{entry.Id}?fresh=1");
+    }
+
+    private void OpenEntry(int id) => Nav.NavigateTo($"/journal/entry/{id}");
+    private void OpenLastSession()
+    {
+        if (_lastSession is not null) Nav.NavigateTo($"/sleep/history/{_lastSession.Id}");
+    }
+
+    public void Dispose()
+    {
+        Journal.Changed -= OnChanged;
+        Sessions.Changed -= OnChanged;
+        Scheduler.ActiveProfileChanged -= OnChanged;
+    }
+}

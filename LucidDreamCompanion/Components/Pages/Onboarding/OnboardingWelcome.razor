@@ -1,0 +1,57 @@
+@page "/onboarding/welcome"
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 var(--pad-x) 24px;text-align:center">
+        <div style="display:inline-flex;align-self:center;padding:22px;border-radius:50%;background:var(--accent-soft);margin-bottom:22px">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+            </svg>
+        </div>
+        <h1 style="font-size:26px;font-weight:500;letter-spacing:-0.4px;margin:0 0 12px">Lucid Dream Companion</h1>
+        <div style="font-size:14px;color:var(--text-sec);line-height:1.6;max-width:320px;margin:0 auto 28px">
+            Capture dreams the moment you wake — by voice or text. Train lucidity with proven techniques,
+            overnight audio cues and daytime reality checks. Watch your streaks and lucidity rate climb.
+            Everything stays private, on this device.
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:320px;margin:0 auto;width:100%">
+            <div class="onboard-bullet"><span>🌙</span> Voice or text dream journaling</div>
+            <div class="onboard-bullet"><span>🔔</span> Cues &amp; reality-check reminders</div>
+            <div class="onboard-bullet"><span>📈</span> Streaks, heatmaps &amp; technique stats</div>
+        </div>
+    </div>
+
+    <div style="padding:0 var(--pad-x) 28px;display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-primary" style="padding:15px" @onclick="Start">Get started</button>
+        <button class="btn btn-ghost" style="color:var(--text-ter)" @onclick="Skip">Skip setup</button>
+    </div>
+</div>
+
+<style>
+.onboard-bullet {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13.5px;
+    color: var(--text-pri);
+    text-align: left;
+    background: rgba(26,32,56,0.4);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+.onboard-bullet span { font-size: 16px; }
+</style>
+
+@code {
+    private void Start() => Nav.NavigateTo("/onboarding/notifications", replace: true);
+
+    private void Skip()
+    {
+        Preferences.Set("ldc.onboarding.notifications.done", true);
+        Preferences.Set("ldc.onboarding.technique.done", true);
+        Preferences.Set("ldc.onboarding.done", true);
+        Nav.NavigateTo("/", replace: true);
+    }
+}

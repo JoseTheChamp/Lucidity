@@ -66,6 +66,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<ICueSchedulerService, CueSchedulerService>();
         builder.Services.AddSingleton<ISleepSessionService, SleepSessionService>();
         builder.Services.AddSingleton<ISpeechToTextService, SpeechToTextService>();
+        builder.Services.AddSingleton<ITechniqueTemplateService, TechniqueTemplateService>();
+        builder.Services.AddSingleton<IStatsService, StatsService>();
+        builder.Services.AddSingleton<IExportService, ExportService>();
         builder.Services.AddSingleton<NotificationRouter>();
 
 #if DEBUG
@@ -90,6 +93,7 @@ public static class MauiProgram
         await ApplyAdditiveSchemaAsync(db);
         await DefaultTagsSeeder.SeedAsync(db);
         await BundledAudioSeeder.SeedAsync(db);
+        await TechniqueTemplatesSeeder.SeedAsync(db);
         logger.LogInformation("Database initialized at {Path}", db.Database.GetDbConnection().DataSource);
     }
 

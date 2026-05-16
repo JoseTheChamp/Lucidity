@@ -10,7 +10,11 @@ A .NET MAUI Blazor Hybrid app for journaling dreams, training lucidity, and runn
 - **Phase 4 — Cue Scheduling (clock-based & interval)**: ✅ complete
 - **Phase 5 — Sleep Sessions & Sleep-Relative Cues**: ✅ complete
 - **Phase 6 — Voice Journaling**: ✅ complete
-- Phases 7–9: pending
+- **Phase 7 — Technique Mode Templates**: ✅ complete
+- **Phase 8 — Stats & Streaks**: ✅ complete
+- **Phase 9 — Polish & Export**: ✅ complete
+
+**All 9 phases complete.**
 
 ## Build
 
@@ -87,3 +91,30 @@ Lifted verbatim from the Claude Design handoff (`design/lucidity/project/tokens.
 - **Locale**: `AppSettings.SpeechLocale` (new column) — `/settings/voice` lets Josef pick English / Czech or device default. Empty = device culture.
 - **Lock-screen quick capture**: ending a sleep session posts a low-priority "Log your dream" notification (`NotificationService.ShowDreamCaptureAsync`). Tapping it creates an entry and opens the editor with `?mic=1`, which auto-starts dictation. The notification is cancelled on tap.
 - Manifest: added a `<queries>` entry for `android.speech.RecognitionService` so the recognizer is visible on Android 11+.
+
+## Phase 7 — Notes
+
+- **Five technique templates** seeded as locked `CueProfile`s (`IsTechniqueTemplate = true`): WBTB, MILD, FILD, WILD, SSILD. `TechniqueDefinitions.cs` holds the static metadata (overview, step guide, paired tags, cue specs); `TechniqueTemplatesSeeder` creates the profiles + cues on first run (resolving bundled audio assets by key, after `BundledAudioSeeder`).
+- **Cue specs**: WBTB = bell @ sleep+5h; MILD = no cues (mental technique); FILD = voice cue @ +4h30m + reality-check bell @ +4h40m; WILD = pink-noise (150 loops ≈ 20 min) @ +6h; SSILD = soft bell @ +4h30m. *Spec note:* the spec listed FILD's 2nd cue as "ClockBased … 10 min later" — ClockBased can't express "10 min after a sleep-relative event", so it's a SleepRelative cue at +4h40m, which is what the spec intends.
+- **`/techniques`** — 2-column card grid; **`/techniques/{key}`** — overview, numbered step guide (accent markers, readable in dark mode), cue list, paired tags, "Activate tonight" + "Duplicate as editable profile".
+- **Locked**: technique profiles can't be edited. `CueProfiles` already hid Edit/Delete for templates; `ProfileDetail` now also hides cue add/reorder/delete and the per-cue editor link for templates, offering "Duplicate as editable profile" instead. Duplicating always produces an unlocked, fully-editable copy.
+- **Onboarding**: a "Pick a starter technique" step (`/onboarding/technique`, MILD pre-selected/recommended) now runs after the notification-permission screen on first launch. Continue lands on the chosen technique's guide.
+
+## Phase 8 — Notes
+
+- **Nav restructure**: the bottom nav is now **Home / Journal / Sleep / Stats / Settings** (matching the design). Cues + Techniques live under the Sleep tab (the Sleep nav item highlights for `/sleep`, `/cues`, `/techniques`). `/` is the Home dashboard; the journal list moved to `/journal` only.
+- **`StatsService`** computes everything from spec §8: current + longest journaling streak (consecutive days by local `DreamDate` — resets at local midnight, with a one-day grace so today doesn't break the streak before it's over), totals, all-time / 30-day / 90-day lucidity rate, top-5 tags, per-technique comparison (lucidity rate of dreams in sessions linked to each cue profile), reality-check completion rate (last 7 days vs. the scheduled estimate), a 90-day heatmap, and a rolling-30-day lucidity trend sampled weekly.
+- **`/stats`**: 🔥 hero streak, big-number grid, 90-day calendar heatmap (7-row weekday grid, 6-step lucidity colour scale, leading blanks align weekdays), hand-rolled SVG trend line (no charting dependency), top-tags horizontal bars, technique-comparison table, reality-check tile.
+- **`/` Home dashboard**: greeting + date, streak card → Stats, last-night session card → session detail, active-profile card → Cues, quick "+ New dream" / Sleep actions, three recent dreams.
+- **Gamification**: streak milestones (3/7/14/30/60/100 nights) trigger a CSS confetti burst + toast on the Home screen, tracked via `Preferences` so each milestone celebrates once. The first-ever lucid dream shows a one-time "🌙 First Lucid Dream" badge on its detail screen.
+
+## Phase 9 — Notes
+
+- **Export** (`ExportService`): JSON is a complete backup (DTO graph — tags, audio assets, cue profiles, cues, sessions, dreams, logs, reminders, settings) shared via the Android share sheet. Markdown writes one file per dream with YAML frontmatter into a zip organised `dreams/YYYY/MM/`, also shared.
+- **Import**: picks a JSON backup and restores it with full FK re-mapping (old id → new id across all tables). **Merge** appends to the current journal (reusing tags by name); **Replace** wipes everything first (double-confirmed in the UI). Round-trips faithfully.
+- **Data management** (`/settings/data`): export, import, clear cue/reality-check logs, `VACUUM` compaction, and "Delete all data" (double-confirm → wipe + re-seed the built-in tags/sounds/techniques so the app stays usable).
+- **About** (`/settings/about`): app version/build via `AppInfo`, platform info.
+- **4-screen onboarding**: Welcome → Permissions (notifications + microphone, skippable) → Pick a starter technique → Morning reminder time. Sets `ldc.onboarding.done` at the end. Pre-Phase-9 users who already finished the old flow are not re-onboarded.
+- **Performance**: the journal list now uses Blazor `<Virtualize>` over a flattened header/entry row list — smooth with thousands of entries. DB indexes on `DreamEntry.DreamDate`, `DreamEntry.CreatedAt`, `Tag.Name`, `ScheduledCueLog.ScheduledFor` were already in place from earlier phases.
+- **Accessibility**: icon-only buttons carry `aria-label`s; the dark theme is high-contrast; in-app text scales with the device's system font-size setting (Android `WebView.Settings.TextZoom` driven by `Configuration.FontScale`).
+- **Deferred**: the optional "audio output route" picker (default speaker / Bluetooth / wired) from spec §9.4 is **not implemented** — reliable output-device routing on Android is heavily device-specific and the spec flags it as a nice-to-have for paired sleep headphones. Cues already request `USAGE_ALARM` audio focus, which routes correctly to connected headphones in practice. Can be added later if wanted.

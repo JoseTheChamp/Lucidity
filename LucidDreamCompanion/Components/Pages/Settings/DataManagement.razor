@@ -1,0 +1,167 @@
+@page "/settings/data"
+@inject IExportService Export
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/settings")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Settings</span>
+            <h1 style="font-size:22px">Data &amp; backup</h1>
+        </div>
+    </header>
+
+    <div class="settings-list">
+        <div class="field">
+            <span class="field-label">Export</span>
+            <div style="font-size:12.5px;color:var(--text-sec);margin-bottom:10px">
+                JSON is a complete backup (settings, profiles, cues, dreams). Markdown is one readable file per dream.
+            </div>
+            <div style="display:flex;gap:10px">
+                <button class="btn btn-primary" style="flex:1" @onclick="ExportJson" disabled="@_busy">Export JSON</button>
+                <button class="btn" style="flex:1" @onclick="ExportMarkdown" disabled="@_busy">Export Markdown</button>
+            </div>
+        </div>
+
+        <div class="field">
+            <span class="field-label">Import</span>
+            <div style="font-size:12.5px;color:var(--text-sec);margin-bottom:10px">
+                Restore from a JSON backup. <b style="color:var(--text-pri)">Merge</b> appends it to your journal;
+                <b style="color:var(--text-pri)">Replace</b> wipes everything first.
+            </div>
+            <div style="display:flex;gap:10px">
+                <button class="btn" style="flex:1" @onclick="ImportMerge" disabled="@_busy">Import · merge</button>
+                <button class="btn btn-warn" style="flex:1" @onclick="ImportReplace" disabled="@_busy">Import · replace</button>
+            </div>
+        </div>
+
+        <div class="field">
+            <span class="field-label">Maintenance</span>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <button class="btn" @onclick="ClearLogs" disabled="@_busy">Clear cue &amp; reality-check logs</button>
+                <button class="btn" @onclick="Vacuum" disabled="@_busy">Compact database (VACUUM)</button>
+                <button class="btn btn-warn" @onclick="DeleteAll" disabled="@_busy">Delete all data…</button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_status))
+        {
+            <div class="card" style="border-color:@(_error ? "rgba(248,113,113,0.35)" : "rgba(94,234,212,0.35)");background:@(_error ? "rgba(248,113,113,0.06)" : "rgba(94,234,212,0.06)")">
+                <div style="font-size:13px;color:@(_error ? "var(--warn)" : "var(--lucid)")">@_status</div>
+            </div>
+        }
+    </div>
+</div>
+
+<ConfirmDialog @ref="_confirm" />
+
+@code {
+    private bool _busy;
+    private bool _error;
+    private string _status = "";
+    private ConfirmDialog? _confirm;
+
+    private void Set(string msg, bool error = false)
+    {
+        _status = msg;
+        _error = error;
+    }
+
+    private async Task ExportJson()
+    {
+        _busy = true;
+        try
+        {
+            var ok = await Export.ExportJsonAsync();
+            Set(ok ? "JSON backup ready — choose where to save or share it." : "Export failed.", !ok);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ExportMarkdown()
+    {
+        _busy = true;
+        try
+        {
+            var ok = await Export.ExportMarkdownAsync();
+            Set(ok ? "Markdown archive ready to share." : "Export failed.", !ok);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ImportMerge() => await Import(ImportMode.Merge);
+
+    private async Task ImportReplace()
+    {
+        if (_confirm is null) return;
+        var ok = await _confirm.ShowAsync(
+            "Replace all data?",
+            "Everything currently in the app will be deleted and replaced with the backup's contents. This cannot be undone.",
+            "Replace");
+        if (!ok) return;
+        await Import(ImportMode.Replace);
+    }
+
+    private async Task Import(ImportMode mode)
+    {
+        _busy = true;
+        try
+        {
+            var result = await Export.ImportJsonAsync(mode);
+            Set(result.Success ? $"{result.Message} ({result.EntriesImported} dreams)" : result.Message, !result.Success);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ClearLogs()
+    {
+        if (_confirm is null) return;
+        var ok = await _confirm.ShowAsync(
+            "Clear logs?",
+            "Removes the cue-firing and reality-check history. Your dreams and sessions are untouched.",
+            "Clear", destructive: false);
+        if (!ok) return;
+        _busy = true;
+        try
+        {
+            await Export.ClearLogsAsync();
+            Set("Logs cleared.");
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task Vacuum()
+    {
+        _busy = true;
+        try
+        {
+            await Export.VacuumAsync();
+            Set("Database compacted.");
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteAll()
+    {
+        if (_confirm is null) return;
+        var first = await _confirm.ShowAsync(
+            "Delete all data?",
+            "Every dream, session, cue profile and setting will be permanently erased. Built-in tags, sounds and techniques are restored fresh.",
+            "Continue");
+        if (!first) return;
+        var second = await _confirm.ShowAsync(
+            "Are you absolutely sure?",
+            "This is your last chance. There is no undo. Consider exporting a JSON backup first.",
+            "Delete everything");
+        if (!second) return;
+        _busy = true;
+        try
+        {
+            await Export.DeleteAllDataAsync();
+            Set("All data deleted. Defaults restored.");
+        }
+        finally { _busy = false; }
+    }
+}

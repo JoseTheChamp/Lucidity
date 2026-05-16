@@ -1,0 +1,62 @@
+@page "/settings/about"
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/settings")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Settings</span>
+            <h1 style="font-size:22px">About</h1>
+        </div>
+    </header>
+
+    <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:var(--gap)">
+        <div class="card" style="text-align:center;padding:28px 18px">
+            <div style="display:inline-flex;padding:18px;border-radius:50%;background:var(--accent-soft);margin-bottom:14px">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+            </div>
+            <div style="font-size:19px;font-weight:500">Lucid Dream Companion</div>
+            <div class="mono" style="font-size:12px;color:var(--text-ter);margin-top:6px">
+                v@(_version) · build @(_build)
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="label-meta" style="margin-bottom:10px">What it does</div>
+            <div style="font-size:13.5px;color:var(--text-sec);line-height:1.55">
+                A private dream journal and lucid-dreaming trainer — voice or text journaling, overnight audio cues,
+                sleep sessions, reality checks, technique guides and progress stats. Everything stays on this device.
+            </div>
+        </div>
+
+        <div class="settings-list" style="padding:0">
+            <div class="settings-item" style="cursor:default">
+                <span class="label">Platform</span>
+                <span class="meta">@_platform</span>
+            </div>
+            <div class="settings-item" style="cursor:default">
+                <span class="label">Data location</span>
+                <span class="meta">On-device only</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _version = "—";
+    private string _build = "—";
+    private string _platform = "—";
+
+    protected override void OnInitialized()
+    {
+        try
+        {
+            _version = AppInfo.Current.VersionString;
+            _build = AppInfo.Current.BuildString;
+            _platform = $"{DeviceInfo.Current.Platform} {DeviceInfo.Current.VersionString}";
+        }
+        catch { /* AppInfo unavailable in some hosts */ }
+    }
+}

@@ -1,0 +1,68 @@
+@page "/onboarding/technique"
+@inject ITechniqueTemplateService Techniques
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <div class="appbar">
+        <div style="flex:1">
+            <span class="subtitle">Setup</span>
+            <h1 style="font-size:24px">Pick a starter technique</h1>
+        </div>
+    </div>
+
+    <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:14px">
+        <div style="font-size:13.5px;color:var(--text-sec);line-height:1.5">
+            A technique gives your nights a focus. <b style="color:var(--text-pri)">MILD</b> is the gentlest place
+            to start — no alarms, just intention. You can switch or explore the rest anytime under Cues → Techniques.
+        </div>
+
+        @foreach (var t in Techniques.Definitions)
+        {
+            var selected = t.Key == _selected;
+            <div class="card" style="@(selected ? "border-color:var(--accent);background:var(--accent-soft)" : "")"
+                 @onclick="() => _selected = t.Key">
+                <div style="display:flex;align-items:center;gap:12px">
+                    <div class="mono" style="font-size:18px;color:@(selected ? "var(--accent)" : "var(--text-sec)")">@t.Key</div>
+                    <div style="flex:1">
+                        <div style="font-size:14px;font-weight:500">
+                            @t.Tagline
+                            @if (t.Key == "MILD")
+                            {
+                                <span class="pill" style="margin-left:6px;border-color:var(--accent);color:var(--accent)">recommended</span>
+                            }
+                        </div>
+                        <div style="font-size:12px;color:var(--text-ter);margin-top:2px">
+                            @(t.Cues.Length == 0 ? "No audio cues" : $"{t.Cues.Length} cue{(t.Cues.Length == 1 ? "" : "s")}")
+                        </div>
+                    </div>
+                    @if (selected)
+                    {
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    }
+                </div>
+            </div>
+        }
+
+        <div style="display:flex;gap:10px;margin-top:6px">
+            <button class="btn btn-primary" style="flex:1" @onclick="Continue">Continue</button>
+            <button class="btn" @onclick="Skip">Skip</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _selected = "MILD";
+
+    private void Continue()
+    {
+        Preferences.Set("ldc.onboarding.technique.done", true);
+        Preferences.Set("ldc.onboarding.starterTechnique", _selected);
+        Nav.NavigateTo("/onboarding/reminder", replace: true);
+    }
+
+    private void Skip()
+    {
+        Preferences.Set("ldc.onboarding.technique.done", true);
+        Nav.NavigateTo("/onboarding/reminder", replace: true);
+    }
+}

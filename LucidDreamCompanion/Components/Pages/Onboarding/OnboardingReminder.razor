@@ -1,0 +1,81 @@
+@page "/onboarding/reminder"
+@inject IJournalReminderService Reminders
+@inject INotificationService Notifications
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <div class="appbar">
+        <div style="flex:1">
+            <span class="subtitle">Setup · last step</span>
+            <h1 style="font-size:24px">Morning reminder</h1>
+        </div>
+    </div>
+
+    <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:18px">
+        <div class="card">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+                <div style="width:42px;height:42px;border-radius:12px;background:var(--accent-soft);border:1px solid var(--border-2);display:flex;align-items:center;justify-content:center">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                </div>
+                <div style="font-size:13.5px;color:var(--text-sec);line-height:1.5">
+                    Dreams fade within minutes of waking. A daily nudge is the single biggest thing you can do for recall.
+                </div>
+            </div>
+            <div class="field">
+                <span class="field-label">Remind me to journal at</span>
+                <input type="time" value="@_time.ToString("HH:mm")" @onchange="OnTimeChanged" />
+            </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-ter);line-height:1.5">
+            You can add more reminders or change this anytime under Settings → Notifications.
+        </div>
+    </div>
+
+    <div style="padding:0 var(--pad-x) 28px;display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-primary" style="padding:15px" @onclick="Finish" disabled="@_busy">
+            @(_busy ? "Saving…" : "Finish setup")
+        </button>
+        <button class="btn btn-ghost" style="color:var(--text-ter)" @onclick="Skip" disabled="@_busy">Skip</button>
+    </div>
+</div>
+
+@code {
+    private TimeOnly _time = new(6, 30);
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var existing = await Reminders.ListAsync();
+        if (existing.Count > 0) _time = existing[0].Time;
+    }
+
+    private void OnTimeChanged(ChangeEventArgs e)
+    {
+        if (TimeOnly.TryParse(e.Value?.ToString(), out var t)) _time = t;
+    }
+
+    private async Task Finish()
+    {
+        _busy = true;
+        try
+        {
+            var existing = await Reminders.ListAsync();
+            if (existing.Count > 0)
+                await Reminders.UpdateAsync(existing[0].Id, _time, true);
+            else
+                await Reminders.AddAsync(_time);
+            await Notifications.RescheduleAllAsync();
+        }
+        catch { /* reminder scheduling is best-effort */ }
+        finally { _busy = false; }
+        Done();
+    }
+
+    private void Skip() => Done();
+
+    private void Done()
+    {
+        Preferences.Set("ldc.onboarding.done", true);
+        Nav.NavigateTo("/", replace: true);
+    }
+}

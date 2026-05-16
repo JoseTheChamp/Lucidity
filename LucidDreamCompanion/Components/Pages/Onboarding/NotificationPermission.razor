@@ -84,6 +84,9 @@
             var ok = await Notifications.RequestPermissionAsync();
             _state = ok ? State.Granted : State.Denied;
             if (ok) Preferences.Set("ldc.notifications.asked", true);
+            // Also ask for the microphone here so voice journaling works later without a surprise prompt.
+            try { await Permissions.RequestAsync<Permissions.Microphone>(); }
+            catch { /* mic permission is optional */ }
         }
         finally
         {
@@ -97,7 +100,7 @@
     private Task Done()
     {
         Preferences.Set("ldc.onboarding.notifications.done", true);
-        Nav.NavigateTo("/journal", replace: true);
+        Nav.NavigateTo("/onboarding/technique", replace: true);
         return Task.CompletedTask;
     }
 }

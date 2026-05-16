@@ -58,7 +58,8 @@
                 {
                     <div class="card" style="padding:14px">
                         <div style="display:flex;align-items:center;gap:10px">
-                            <div style="flex:1;min-width:0;cursor:pointer" @onclick="() => EditCue(cue.Id)">
+                            <div style="flex:1;min-width:0;@(_profile.IsTechniqueTemplate ? "" : "cursor:pointer")"
+                                 @onclick="() => { if (!_profile.IsTechniqueTemplate) EditCue(cue.Id); }">
                                 <div style="display:flex;align-items:center;gap:8px">
                                     <span style="font-size:14px;font-weight:500">@(string.IsNullOrWhiteSpace(cue.Label) ? "Untitled cue" : cue.Label)</span>
                                     @if (!cue.Enabled)
@@ -68,19 +69,29 @@
                                 </div>
                                 <div class="mono" style="font-size:11px;color:var(--text-ter);margin-top:4px">@DescribeCue(cue)</div>
                             </div>
-                            <div style="display:flex;flex-direction:column;gap:2px">
-                                <button class="btn btn-ghost" style="padding:2px 8px" disabled="@(idx == 0)" @onclick="() => Move(cue.Id, -1)" aria-label="Up">▲</button>
-                                <button class="btn btn-ghost" style="padding:2px 8px" disabled="@(idx == _profile.Cues.Count - 1)" @onclick="() => Move(cue.Id, 1)" aria-label="Down">▼</button>
-                            </div>
-                            <button class="btn btn-ghost" style="padding:8px 10px" @onclick="() => DeleteCue(cue)" aria-label="Delete">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
-                            </button>
+                            @if (!_profile.IsTechniqueTemplate)
+                            {
+                                <div style="display:flex;flex-direction:column;gap:2px">
+                                    <button class="btn btn-ghost" style="padding:2px 8px" disabled="@(idx == 0)" @onclick="() => Move(cue.Id, -1)" aria-label="Up">▲</button>
+                                    <button class="btn btn-ghost" style="padding:2px 8px" disabled="@(idx == _profile.Cues.Count - 1)" @onclick="() => Move(cue.Id, 1)" aria-label="Down">▼</button>
+                                </div>
+                                <button class="btn btn-ghost" style="padding:8px 10px" @onclick="() => DeleteCue(cue)" aria-label="Delete">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                                </button>
+                            }
                         </div>
                     </div>
                 }
             }
 
-            <button class="btn" @onclick="AddCue">+ Add cue</button>
+            @if (!_profile.IsTechniqueTemplate)
+            {
+                <button class="btn" @onclick="AddCue">+ Add cue</button>
+            }
+            else
+            {
+                <button class="btn" @onclick="DuplicateToEdit">Duplicate as editable profile</button>
+            }
 
             <div class="divider" style="margin:8px 0"></div>
 
@@ -148,6 +159,12 @@
     }
 
     private async Task Move(int cueId, int dir) => await Profiles.MoveCueAsync(cueId, dir);
+
+    private async Task DuplicateToEdit()
+    {
+        var copy = await Profiles.DuplicateAsync(Id);
+        if (copy is not null) Nav.NavigateTo($"/cues/profiles/{copy.Id}");
+    }
 
     private async Task DeleteCue(AudioCue cue)
     {

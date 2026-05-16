@@ -49,6 +49,11 @@
             <span class="meta">@_profileCount profile@(_profileCount == 1 ? "" : "s")</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
         </div>
+        <div class="settings-item" @onclick='() => Nav.NavigateTo("/techniques")'>
+            <span class="label">Techniques</span>
+            <span class="meta">WBTB · MILD · FILD · WILD · SSILD</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
         <div class="settings-item" @onclick='() => Nav.NavigateTo("/cues/audio")'>
             <span class="label">Audio library</span>
             <span class="meta">Bundled · imports · recordings</span>
