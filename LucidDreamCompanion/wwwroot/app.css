@@ -450,6 +450,70 @@ a:hover { color: var(--accent); filter: brightness(1.1); }
 }
 .voice-label { font-size: 12.5px; color: var(--text-sec); }
 
+/* Reusable voice text-area */
+.voice-field {
+  background: rgba(19,24,41,0.7);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.voice-field-input {
+  font-size: 14px;
+  line-height: 1.5;
+  width: 100%;
+}
+.voice-field-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.voice-mic {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: rgba(26,32,56,0.6);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.voice-mic.recording {
+  background: rgba(248,113,113,0.18);
+  border-color: rgba(248,113,113,0.5);
+  color: var(--warn);
+  animation: mic-pulse 1.6s ease-in-out infinite;
+}
+
+/* Small collapsed "aim" affordance */
+.aim-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  border: 1px dashed var(--border-2);
+  background: transparent;
+  color: var(--text-sec);
+  font-size: 12px;
+  cursor: pointer;
+}
+.aim-chip:hover { border-color: var(--accent); color: var(--accent); }
+.aim-readout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+.aim-readout .aim-text {
+  font-size: 12.5px;
+  color: var(--lavender);
+  line-height: 1.45;
+}
+
 /* First lucid dream badge */
 .first-lucid-badge {
   display: flex;

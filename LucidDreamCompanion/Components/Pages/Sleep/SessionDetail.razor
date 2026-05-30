@@ -12,7 +12,7 @@
         </button>
         <div style="flex:1">
             <span class="subtitle">Sleep session</span>
-            <h1 style="font-size:22px">@(_session?.StartedAt.ToLocalTime().ToString("MMM d") ?? "…")</h1>
+            <h1 style="font-size:22px">@(_session is null ? "…" : _session.MainDate.ToString("MMM d"))</h1>
         </div>
         @if (_session is not null)
         {
@@ -45,20 +45,88 @@
                     </div>
                 </div>
                 <div class="divider" style="margin:14px 0"></div>
-                <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-sec)">
-                    <span>@_session.StartedAt.ToLocalTime().ToString("ddd MMM d · HH:mm") → @(_session.EndedAt?.ToLocalTime().ToString("HH:mm") ?? "—")</span>
-                    @if (_session.Quality.HasValue)
-                    {
-                        <span class="mono">@_session.Quality / 5 ★</span>
-                    }
-                </div>
+                @if (_editingTimes)
+                {
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        <label class="label-meta">Start
+                            <input type="datetime-local" value="@_startDraft" @onchange="e => _startDraft = e.Value?.ToString() ?? _startDraft"
+                                   style="margin-top:4px;width:100%;padding:6px 8px;font-size:13px" />
+                        </label>
+                        @if (_session.EndedAt is not null)
+                        {
+                            <label class="label-meta">End
+                                <input type="datetime-local" value="@_endDraft" @onchange="e => _endDraft = e.Value?.ToString() ?? _endDraft"
+                                       style="margin-top:4px;width:100%;padding:6px 8px;font-size:13px" />
+                            </label>
+                        }
+                        <div style="display:flex;gap:8px;margin-top:4px">
+                            <button class="btn btn-primary" style="padding:6px 14px;font-size:13px" @onclick="SaveTimes">Save times</button>
+                            <button class="btn" style="padding:6px 14px;font-size:13px" @onclick="() => _editingTimes = false">Cancel</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--text-sec)">
+                        <span style="cursor:pointer" @onclick="EditTimes">
+                            @_session.StartedAt.ToLocalTime().ToString("ddd MMM d · HH:mm") → @(_session.EndedAt?.ToLocalTime().ToString("HH:mm") ?? "—")
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.8" style="margin-left:4px;vertical-align:middle"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                        </span>
+                        @if (_session.Quality.HasValue)
+                        {
+                            <span class="mono">@_session.Quality / 5 ★</span>
+                        }
+                    </div>
+                }
                 @if (_session.TechniqueProfile is not null)
                 {
                     <div style="font-size:12px;color:var(--text-ter);margin-top:8px">Cue profile: @_session.TechniqueProfile.Name</div>
                 }
-                @if (!string.IsNullOrWhiteSpace(_session.Notes))
+            </div>
+
+            <!-- Aim & notes — editable, voice or text -->
+            <div class="card">
+                <div class="label-meta" style="margin-bottom:8px">Night's aim</div>
+                @if (_editingAim)
                 {
-                    <div style="font-size:13px;color:var(--text-pri);margin-top:10px;white-space:pre-wrap">@_session.Notes</div>
+                    <VoiceTextArea @bind-Value="_aimDraft"
+                                   Placeholder="What did you intend for this night?" MinHeight="56" />
+                    <div style="display:flex;gap:8px;margin-top:8px">
+                        <button class="btn btn-primary" style="padding:6px 14px;font-size:13px" @onclick="SaveAim">Save</button>
+                        <button class="btn" style="padding:6px 14px;font-size:13px" @onclick="() => _editingAim = false">Cancel</button>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_session.Aim))
+                {
+                    <div class="aim-readout" @onclick="EditAim">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--lavender)" stroke-width="1.7" style="flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
+                        <div class="aim-text">@_session.Aim</div>
+                    </div>
+                }
+                else
+                {
+                    <button class="aim-chip" @onclick="EditAim">+ Add an aim</button>
+                }
+
+                <div class="divider" style="margin:14px 0"></div>
+
+                <div class="label-meta" style="margin-bottom:8px">Notes</div>
+                @if (_editingNotes)
+                {
+                    <VoiceTextArea @bind-Value="_notesDraft"
+                                   Placeholder="How the night went…" MinHeight="70" />
+                    <div style="display:flex;gap:8px;margin-top:8px">
+                        <button class="btn btn-primary" style="padding:6px 14px;font-size:13px" @onclick="SaveNotes">Save</button>
+                        <button class="btn" style="padding:6px 14px;font-size:13px" @onclick="() => _editingNotes = false">Cancel</button>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_session.Notes))
+                {
+                    <div style="font-size:13px;color:var(--text-pri);white-space:pre-wrap;cursor:pointer" @onclick="EditNotes">@_session.Notes</div>
+                }
+                else
+                {
+                    <button class="aim-chip" @onclick="EditNotes">+ Add a note</button>
                 }
             </div>
 
@@ -128,6 +196,13 @@
     private List<ScheduledCueLog> _cueLogs = new();
     private int _lucidCount;
     private ConfirmDialog? _confirm;
+    private bool _editingAim;
+    private bool _editingNotes;
+    private bool _editingTimes;
+    private string _aimDraft = "";
+    private string _notesDraft = "";
+    private string _startDraft = "";
+    private string _endDraft = "";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -146,12 +221,63 @@
 
     private void OpenEntry(int id) => Nav.NavigateTo($"/journal/entry/{id}");
 
+    private void EditAim()
+    {
+        _aimDraft = _session?.Aim ?? "";
+        _editingAim = true;
+    }
+
+    private async Task SaveAim()
+    {
+        if (_session is null) return;
+        await Sessions.SetAimAsync(_session.Id, _aimDraft);
+        _session = await Sessions.GetAsync(Id);
+        _editingAim = false;
+    }
+
+    private void EditTimes()
+    {
+        if (_session is null) return;
+        _startDraft = _session.StartedAt.ToLocalTime().ToString("yyyy-MM-ddTHH:mm");
+        _endDraft = _session.EndedAt?.ToLocalTime().ToString("yyyy-MM-ddTHH:mm") ?? "";
+        _editingTimes = true;
+    }
+
+    private async Task SaveTimes()
+    {
+        if (_session is null) return;
+        if (!DateTime.TryParse(_startDraft, out var startLocal)) { _editingTimes = false; return; }
+        DateTime? endUtc = null;
+        if (_session.EndedAt is not null)
+        {
+            if (!DateTime.TryParse(_endDraft, out var endLocal)) { _editingTimes = false; return; }
+            endUtc = endLocal.ToUniversalTime();
+        }
+        await Sessions.SetTimesAsync(_session.Id, startLocal.ToUniversalTime(), endUtc);
+        _session = await Sessions.GetAsync(Id);
+        _editingTimes = false;
+    }
+
+    private void EditNotes()
+    {
+        _notesDraft = _session?.Notes ?? "";
+        _editingNotes = true;
+    }
+
+    private async Task SaveNotes()
+    {
+        if (_session is null) return;
+        await Sessions.SetNotesAsync(_session.Id, _notesDraft);
+        _session = await Sessions.GetAsync(Id);
+        _editingNotes = false;
+    }
+
     private async Task Delete()
     {
         if (_session is null || _confirm is null) return;
         var msg = _entries.Count > 0
-            ? $"This {_session.StartedAt.ToLocalTime():MMM d} session will be removed. Its {_entries.Count} linked dream(s) are kept — they'll just no longer be tied to a session."
-            : $"This {_session.StartedAt.ToLocalTime():MMM d} session will be permanently removed.";
+            ? $"This {_session.MainDate:MMM d} session will be removed. Its {_entries.Count} linked dream(s) are kept — they'll just no longer be tied to a session."
+            : $"This {_session.MainDate:MMM d} session will be permanently removed.";
         var ok = await _confirm.ShowAsync("Delete this session?", msg, "Delete");
         if (!ok) return;
         await Sessions.DeleteAsync(_session.Id);

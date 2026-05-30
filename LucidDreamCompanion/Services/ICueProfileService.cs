@@ -14,7 +14,7 @@ public interface ICueProfileService
     Task DeleteAsync(int id, CancellationToken ct = default);
 
     Task<AudioCue?> GetCueAsync(int cueId, CancellationToken ct = default);
-    Task<AudioCue> AddCueAsync(int profileId, CancellationToken ct = default);
+    Task<AudioCue> AddCueAsync(int profileId, bool isAlarm = false, CancellationToken ct = default);
     Task SaveCueAsync(AudioCue cue, CancellationToken ct = default);
     Task DeleteCueAsync(int cueId, CancellationToken ct = default);
     Task MoveCueAsync(int cueId, int direction, CancellationToken ct = default);  // -1 up, +1 down

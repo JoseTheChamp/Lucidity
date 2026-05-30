@@ -29,11 +29,65 @@
                 </span>
             </div>
 
+            <!-- Night's aim — small, only expands on tap -->
+            <div style="margin-top:12px">
+                @if (_aimOpen)
+                {
+                    <VoiceTextArea @bind-Value="_pendingAim"
+                                   Placeholder="Tonight I want to… e.g. notice my hands and realise I'm dreaming"
+                                   MinHeight="56" />
+                    <div style="display:flex;gap:8px;margin-top:8px">
+                        <button class="btn btn-primary" style="flex:1;padding:8px" @onclick="CloseAim">Save aim</button>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_pendingAim))
+                {
+                    <div class="aim-readout" @onclick="OpenAim">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--lavender)" stroke-width="1.7" style="flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
+                        <div><div class="label-meta">Tonight's aim</div><div class="aim-text">@_pendingAim</div></div>
+                    </div>
+                }
+                else
+                {
+                    <button class="aim-chip" @onclick="OpenAim">+ Set tonight's aim</button>
+                }
+            </div>
+
+            <!-- Mid-night brain teasers (handy after a WBTB wake) -->
+            <div class="sleep-games">
+                <button class="sleep-game-btn" @onclick='() => Nav.NavigateTo("/games/sudoku")' aria-label="Sudoku">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+                    <span>Sudoku</span>
+                </button>
+                <button class="sleep-game-btn" @onclick='() => Nav.NavigateTo("/games/mines")' aria-label="Mines">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+                    <span>Mines</span>
+                </button>
+                <button class="sleep-game-btn" @onclick='() => Nav.NavigateTo("/games/math")' aria-label="Math">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h6M8 4v6"/><path d="M14 6l4 4M14 10l4-4"/><path d="M5 17h6"/><path d="M14 15h6M14 19h6"/></svg>
+                    <span>Math</span>
+                </button>
+            </div>
+
             <!-- Center: elapsed -->
             <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:60px">
-                <div class="label-meta" style="margin-bottom:14px;text-align:center">
-                    Sleeping since @_active.StartedAt.ToLocalTime().ToString("HH:mm")
-                </div>
+                @if (_editStart)
+                {
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+                        <span class="label-meta">Sleeping since</span>
+                        <input type="time" value="@_startEdit" @onchange="e => _startEdit = e.Value?.ToString() ?? _startEdit"
+                               style="padding:4px 8px;font-size:13px" />
+                        <button class="btn btn-ghost" style="padding:4px 8px;font-size:12px;color:var(--accent)" @onclick="SaveStartEdit">Save</button>
+                        <button class="btn btn-ghost" style="padding:4px 8px;font-size:12px;color:var(--text-ter)" @onclick="() => _editStart = false">Cancel</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="label-meta" style="margin-bottom:14px;text-align:center;cursor:pointer" @onclick="OpenStartEdit">
+                        Sleeping since @_active.StartedAt.ToLocalTime().ToString("HH:mm")
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.8" style="margin-left:4px;vertical-align:middle"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    </div>
+                }
                 <div class="mono tabular session-timer">
                     @Hh:@Mm<span class="session-secs">:@Ss</span>
                 </div>
@@ -131,7 +185,8 @@ else
 
                     <div class="field" style="margin-top:12px">
                         <span class="field-label">Notes (optional)</span>
-                        <textarea class="input-bare" style="min-height:70px" placeholder="Woke a few times, vivid near morning…" @bind="_notes"></textarea>
+                        <VoiceTextArea @bind-Value="_notes"
+                                       Placeholder="Woke a few times, vivid near morning…" MinHeight="70" />
                     </div>
 
                     <div style="display:flex;gap:10px;margin-top:16px">
@@ -152,7 +207,13 @@ else
                     </div>
 
                     <div class="field" style="text-align:left;margin-bottom:14px">
-                        <span class="field-label">Cue profile</span>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                            <span class="field-label" style="margin:0">Cue profile</span>
+                            <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px;color:var(--accent)"
+                                    @onclick='() => Nav.NavigateTo("/cues/profiles")'>
+                                Manage →
+                            </button>
+                        </div>
                         <select class="input" @bind="_selectedProfileId">
                             <option value="0">No cues tonight</option>
                             @foreach (var p in _profiles)
@@ -162,9 +223,53 @@ else
                         </select>
                     </div>
 
+                    <div class="field" style="text-align:left;margin-bottom:14px">
+                        <span class="field-label">Night's aim (optional)</span>
+                        @if (_aimOpen)
+                        {
+                            <VoiceTextArea @bind-Value="_pendingAim"
+                                           Placeholder="Tonight I want to… e.g. notice my hands and realise I'm dreaming"
+                                           MinHeight="56" />
+                            <button class="btn" style="margin-top:8px;padding:6px 12px;font-size:12px" @onclick="CloseAim">Done</button>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(_pendingAim))
+                        {
+                            <div class="aim-readout" @onclick="OpenAim">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--lavender)" stroke-width="1.7" style="flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
+                                <div class="aim-text">@_pendingAim</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <button class="aim-chip" @onclick="OpenAim">+ Set an intention for the night</button>
+                        }
+                    </div>
+
                     <button class="btn btn-primary" style="width:100%;padding:16px" @onclick="StartSleep" disabled="@_busy">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A0E1A" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
                         Start Sleep
+                    </button>
+                </div>
+
+                <div class="settings-item" @onclick='() => Nav.NavigateTo("/cues")'>
+                    <span class="label">Cues &amp; techniques</span>
+                    <span class="meta">Profiles · audio · methods</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
+
+                <!-- Brain teasers — handy if you wake mid-night or during WBTB -->
+                <div class="sleep-games">
+                    <button class="sleep-game-btn" @onclick='() => Nav.NavigateTo("/games/sudoku")' aria-label="Sudoku">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+                        <span>Sudoku</span>
+                    </button>
+                    <button class="sleep-game-btn" @onclick='() => Nav.NavigateTo("/games/mines")' aria-label="Mines">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+                        <span>Mines</span>
+                    </button>
+                    <button class="sleep-game-btn" @onclick='() => Nav.NavigateTo("/games/math")' aria-label="Math">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h6M8 4v6"/><path d="M14 6l4 4M14 10l4-4"/><path d="M5 17h6"/><path d="M14 15h6M14 19h6"/></svg>
+                        <span>Math</span>
                     </button>
                 </div>
             }
@@ -182,7 +287,7 @@ else
                         <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(26,32,56,0.35);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer"
                              @onclick="() => OpenSession(s.Id)">
                             <div style="flex:1">
-                                <div style="font-size:14px;font-weight:500">@s.StartedAt.ToLocalTime().ToString("ddd, MMM d")</div>
+                                <div style="font-size:14px;font-weight:500">@s.MainDate.ToString("ddd, MMM d")</div>
                                 <div class="mono" style="font-size:11px;color:var(--text-ter);margin-top:2px">@DurationOf(s)</div>
                             </div>
                             @if (s.Quality.HasValue)
@@ -197,6 +302,36 @@ else
     </div>
 }
 
+<style>
+.sleep-games {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+.sleep-game-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 6px;
+    background: rgba(26, 32, 56, 0.4);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-sec);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 100ms, color 100ms;
+}
+.sleep-game-btn:active {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+</style>
+
 @code {
     private SleepSession? _active;
     private List<CueProfile> _profiles = new();
@@ -209,6 +344,10 @@ else
     private bool _busy;
     private int? _quality;
     private string _notes = "";
+    private string _pendingAim = "";
+    private bool _aimOpen;
+    private bool _editStart;
+    private string _startEdit = "";
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _timerCts;
 
@@ -286,8 +425,48 @@ else
             _sessionLogs = new();
             _profileName = "";
         }
+
+        // Keep the aim field in sync with the active session (unless the user is mid-edit).
+        if (_active is not null && !_aimOpen)
+        {
+            _pendingAim = _active.Aim ?? "";
+        }
+
         RecomputeNextCue();
         EnsureTimer();
+    }
+
+    private void OpenStartEdit()
+    {
+        if (_active is null) return;
+        _startEdit = _active.StartedAt.ToLocalTime().ToString("HH:mm");
+        _editStart = true;
+    }
+
+    private async Task SaveStartEdit()
+    {
+        if (_active is null) return;
+        if (!TimeOnly.TryParse(_startEdit, out var t)) { _editStart = false; return; }
+
+        // Combine the picked clock time with a recent date: today, unless that lands in the future,
+        // in which case it was yesterday (you went to sleep before midnight).
+        var now = DateTime.Now;
+        var local = now.Date + t.ToTimeSpan();
+        if (local > now) local = local.AddDays(-1);
+
+        await Sessions.SetTimesAsync(_active.Id, local.ToUniversalTime(), null);
+        _editStart = false;
+    }
+
+    private void OpenAim() => _aimOpen = true;
+
+    private async Task CloseAim()
+    {
+        _aimOpen = false;
+        if (_active is not null)
+        {
+            await Sessions.SetAimAsync(_active.Id, _pendingAim);
+        }
     }
 
     private void RecomputeNextCue()
@@ -341,7 +520,8 @@ else
         try
         {
             int? profileId = _selectedProfileId == 0 ? null : _selectedProfileId;
-            await Sessions.StartAsync(profileId);
+            _aimOpen = false;
+            await Sessions.StartAsync(profileId, _pendingAim);
         }
         finally { _busy = false; }
     }
@@ -361,6 +541,7 @@ else
         {
             await Sessions.EndAsync(_active.Id, _quality, _notes);
             _ending = false;
+            _pendingAim = "";
         }
         finally { _busy = false; }
     }
@@ -373,6 +554,7 @@ else
         {
             await Sessions.EndAsync(_active.Id, _quality, _notes);
             _ending = false;
+            _pendingAim = "";
             var entry = await Journal.CreateAsync();
             Nav.NavigateTo($"/journal/edit/{entry.Id}?source=session");
         }

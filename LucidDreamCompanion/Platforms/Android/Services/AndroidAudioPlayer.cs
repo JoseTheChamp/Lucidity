@@ -86,9 +86,10 @@ public partial class AudioService
         }
 
         var capturedHandle = handle;
-        player.Completion += (_, _) => OnCompletion(capturedHandle, loop);
+        var loopForever = options.LoopForever;
+        player.Completion += (_, _) => OnCompletion(capturedHandle, loop, loopForever);
 
-        TriggerVibration(ctx, options.VibrationPattern);
+        TriggerVibration(ctx, options.VibrationPattern, options.RepeatVibration);
 
         player.Start();
 
@@ -212,7 +213,7 @@ public partial class AudioService
         }
     }
 
-    private void OnCompletion(int handle, int loopsTotal)
+    private void OnCompletion(int handle, int loopsTotal, bool loopForever = false)
     {
         ActiveHandle? active = null;
         var remaining = 0;
@@ -221,7 +222,7 @@ public partial class AudioService
             if (!_active.TryGetValue(handle, out active)) return;
             if (!_loopRemaining.TryGetValue(handle, out remaining)) remaining = 0;
         }
-        if (remaining > 0)
+        if (loopForever || remaining > 0)
         {
             lock (_gate) _loopRemaining[handle] = remaining - 1;
             try
@@ -264,6 +265,7 @@ public partial class AudioService
         try { active.FadeCts?.Cancel(); } catch { }
         try { if (active.Player.IsPlaying) active.Player.Stop(); } catch { }
         try { active.Player.Release(); } catch { }
+        CancelVibration(Android.App.Application.Context);
         if (active.FocusRequest is not null)
         {
             try
@@ -276,7 +278,7 @@ public partial class AudioService
         RaisePlaybackFinished(handle, active.AssetId, completedNormally);
     }
 
-    private void TriggerVibration(AContext ctx, string? csv)
+    private void TriggerVibration(AContext ctx, string? csv, bool repeat = false)
     {
         if (string.IsNullOrWhiteSpace(csv)) return;
         try
@@ -285,11 +287,14 @@ public partial class AudioService
             var pattern = parts.Select(p => long.TryParse(p, out var v) ? v : 0L).ToArray();
             if (pattern.Length == 0) return;
 
+            // repeat == true loops the waveform from index 0 (alarm); -1 plays it once.
+            var repeatIndex = repeat ? 0 : -1;
+
             if (OperatingSystem.IsAndroidVersionAtLeast(31))
             {
                 var vm = (VibratorManager?)ctx.GetSystemService(AContext.VibratorManagerService);
                 var vib = vm?.DefaultVibrator;
-                vib?.Vibrate(VibrationEffect.CreateWaveform(pattern, -1));
+                vib?.Vibrate(VibrationEffect.CreateWaveform(pattern, repeatIndex));
             }
             else
             {
@@ -297,9 +302,9 @@ public partial class AudioService
                 var vib = (Vibrator?)ctx.GetSystemService(AContext.VibratorService);
                 if (vib is null) return;
                 if (OperatingSystem.IsAndroidVersionAtLeast(26))
-                    vib.Vibrate(VibrationEffect.CreateWaveform(pattern, -1));
+                    vib.Vibrate(VibrationEffect.CreateWaveform(pattern, repeatIndex));
                 else
-                    vib.Vibrate(pattern, -1);
+                    vib.Vibrate(pattern, repeatIndex);
 #pragma warning restore CA1416
             }
         }
@@ -307,6 +312,25 @@ public partial class AudioService
         {
             Logger.LogWarning(ex, "Vibration failed for pattern {Csv}", csv);
         }
+    }
+
+    private void CancelVibration(AContext ctx)
+    {
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(31))
+            {
+                var vm = (VibratorManager?)ctx.GetSystemService(AContext.VibratorManagerService);
+                vm?.DefaultVibrator?.Cancel();
+            }
+            else
+            {
+#pragma warning disable CA1416
+                ((Vibrator?)ctx.GetSystemService(AContext.VibratorService))?.Cancel();
+#pragma warning restore CA1416
+            }
+        }
+        catch { /* best-effort */ }
     }
 
     public async Task<bool> RequestMicrophonePermissionAsync()

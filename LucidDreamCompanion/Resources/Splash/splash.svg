@@ -1,8 +1,41 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg width="456" height="456" viewBox="0 0 456 456" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
-    <path d="m 105.50037,281.60863 c -2.70293,0 -5.00091,-0.90042 -6.893127,-2.70209 -1.892214,-1.84778 -2.837901,-4.04181 -2.837901,-6.58209 0,-2.58722 0.945687,-4.80389 2.837901,-6.65167 1.892217,-1.84778 4.190197,-2.77167 6.893127,-2.77167 2.74819,0 5.06798,0.92389 6.96019,2.77167 1.93749,1.84778 2.90581,4.06445 2.90581,6.65167 0,2.54028 -0.96832,4.73431 -2.90581,6.58209 -1.89221,1.80167 -4.212,2.70209 -6.96019,2.70209 z" style="fill:#ffffff;fill-rule:nonzero;stroke-width:0.838376" />
-    <path d="M 213.56111,280.08446 H 195.99044 L 149.69953,207.0544 c -1.17121,-1.84778 -2.14037,-3.76515 -2.90581,-5.75126 h -0.40578 c 0.36051,2.12528 0.54076,6.67515 0.54076,13.6496 v 65.13172 h -15.54349 v -99.36009 h 18.71925 l 44.7374,71.29798 c 1.89222,2.95695 3.1087,4.98917 3.64945,6.09751 h 0.26996 c -0.45021,-2.6325 -0.67573,-7.09015 -0.67573,-13.37293 v -64.02256 h 15.47557 z" style="fill:#ffffff;fill-rule:nonzero;stroke-width:0.838376" />
-    <path d="m 289.25134,280.08446 h -54.40052 v -99.36009 h 52.23835 v 13.99669 h -36.15411 v 28.13085 h 33.31621 v 13.9271 h -33.31621 v 29.37835 h 38.31628 z" style="fill:#ffffff;fill-rule:nonzero;stroke-width:0.838376" />
-    <path d="M 366.56466,194.72106 H 338.7222 v 85.3634 h -16.08423 v -85.3634 h -27.77455 v -13.99669 h 71.70124 z" style="fill:#ffffff;fill-rule:nonzero;stroke-width:0.838376" />
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Soft aura behind the mark (stacked translucent rings) -->
+  <circle cx="256" cy="256" r="210" fill="#6B8AFF" opacity="0.05" />
+  <circle cx="256" cy="256" r="165" fill="#6B8AFF" opacity="0.06" />
+  <circle cx="256" cy="256" r="122" fill="#A78BFA" opacity="0.06" />
+
+  <!-- Eye socket — symmetric lens -->
+  <path d="M 88 256 C 160 163 352 163 424 256 C 352 349 160 349 88 256 Z" fill="#16203F" opacity="0.55" />
+  <!-- Upper eyelid -->
+  <path d="M 88 256 C 160 163 352 163 424 256" fill="none" stroke="#6B8AFF" stroke-width="16" stroke-linecap="round" />
+  <!-- Lower eyelid -->
+  <path d="M 88 256 C 160 349 352 349 424 256" fill="none" stroke="#6B8AFF" stroke-width="13" stroke-linecap="round" opacity="0.92" />
+  <!-- Canthus glints -->
+  <circle cx="88"  cy="256" r="3.5" fill="#A4B8FF" />
+  <circle cx="424" cy="256" r="3.5" fill="#A4B8FF" />
+  <!-- Full-moon iris -->
+  <circle cx="256" cy="256" r="78" fill="#D4DBEC" />
+  <!-- Maria -->
+  <g fill="#2C3658" opacity="0.5">
+    <ellipse cx="232" cy="230" rx="16" ry="11" transform="rotate(-22 232 230)" />
+    <ellipse cx="262" cy="222" rx="10" ry="7" />
+    <ellipse cx="284" cy="238" rx="11" ry="8" transform="rotate(18 284 238)" />
+    <ellipse cx="298" cy="262" rx="7"  ry="6" />
+    <ellipse cx="268" cy="280" rx="9"  ry="6" transform="rotate(-10 268 280)" />
+    <ellipse cx="236" cy="288" rx="7"  ry="5" transform="rotate(20 236 288)" />
+  </g>
+  <g fill="#2C3658" opacity="0.38">
+    <circle cx="220" cy="258" r="2.4" />
+    <circle cx="306" cy="232" r="1.8" />
+    <circle cx="252" cy="304" r="2.6" />
+  </g>
+  <!-- Specular highlight -->
+  <ellipse cx="226" cy="222" rx="11" ry="5" transform="rotate(-32 226 222)" fill="#FFFFFF" opacity="0.55" />
+  <!-- Terminator shadow -->
+  <ellipse cx="298" cy="298" rx="44" ry="27" transform="rotate(-40 298 298)" fill="#1A2244" opacity="0.32" />
+  <!-- Lucid spark -->
+  <circle cx="332" cy="300" r="13"  fill="#5EEAD4" opacity="0.22" />
+  <circle cx="332" cy="300" r="5"   fill="#5EEAD4" />
+  <circle cx="332" cy="300" r="1.8" fill="#FFFFFF" />
 </svg>

@@ -133,6 +133,8 @@
     private Toast? _toast;
     private ElementReference _bodyRef;
     private bool _bodyJustChanged;
+    private bool _wasEmptyOnOpen;
+    private bool _finalized;
 
     private bool _recording;
     private bool _micHint;
@@ -152,7 +154,18 @@
         _sessions = (await Journal.ListRecentSessionsAsync()).ToList();
         _saveStatus = Fresh == "1" ? "" : "Saved";
         if (Mic == "1") _micAutoStartPending = true;
+        // If the editor opens on a blank entry and the user leaves it blank, we discard it
+        // rather than persisting an empty dream.
+        _wasEmptyOnOpen = IsEntryEmpty();
     }
+
+    private bool IsEntryEmpty()
+        => _entry is not null
+           && string.IsNullOrWhiteSpace(_entry.Title)
+           && string.IsNullOrWhiteSpace(_entry.Body)
+           && _entry.Lucidity == LucidityLevel.None
+           && _entry.SleepQuality is null
+           && _tagIds.Count == 0;
 
     private void OnTagsChanged(IReadOnlyList<int> ids)
     {
@@ -169,9 +182,8 @@
 
     private static string SessionLabel(SleepSession s)
     {
-        var start = s.StartedAt.ToLocalTime();
         var dur = s.EndedAt is null ? "in progress" : $"{(int)(s.EndedAt.Value - s.StartedAt).TotalHours}h";
-        return $"{start:ddd MMM d, HH:mm} · {dur}";
+        return $"{s.MainDate:ddd MMM d} · {s.StartedAt.ToLocalTime():HH:mm} · {dur}";
     }
 
     private void OnLucidityChanged(LucidityLevel lv)
@@ -298,24 +310,48 @@
 
     private async Task Done()
     {
-        _voiceCts?.Cancel();
-        _debounceCts?.Cancel();
-        if (_entry is not null)
-        {
-            await Journal.SaveAsync(_entry, _tagIds);
-        }
+        await FinalizeAsync();
         Nav.NavigateTo("/journal");
     }
 
-    private void Back()
+    private async Task Back()
     {
-        _voiceCts?.Cancel();
+        await FinalizeAsync();
         Nav.NavigateTo("/journal");
+    }
+
+    /// <summary>
+    /// Persists the entry on the way out — or discards it if it was opened blank and is
+    /// still blank, so an untouched "new dream" is never saved.
+    /// </summary>
+    private async Task FinalizeAsync()
+    {
+        if (_finalized) return;
+        _finalized = true;
+        _voiceCts?.Cancel();
+        _debounceCts?.Cancel();
+        if (_entry is null) return;
+
+        if (_wasEmptyOnOpen && IsEntryEmpty())
+        {
+            await Journal.DeleteAsync(_entry.Id);
+        }
+        else
+        {
+            await Journal.SaveAsync(_entry, _tagIds);
+        }
     }
 
     public void Dispose()
     {
         _voiceCts?.Cancel();
         _debounceCts?.Cancel();
+        // Left via system back / navigation without tapping Done — still discard a blank entry.
+        if (!_finalized && _entry is not null && _wasEmptyOnOpen && IsEntryEmpty())
+        {
+            _finalized = true;
+            var id = _entry.Id;
+            _ = Journal.DeleteAsync(id);
+        }
     }
 }

@@ -1,0 +1,313 @@
+@page "/games/sudoku"
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/sleep")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Game</span>
+            <h1 style="font-size:22px">Sudoku</h1>
+        </div>
+        <button class="btn btn-ghost" style="padding:8px" @onclick="() => _showInfo = true" aria-label="How to play">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-sec)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg>
+        </button>
+    </header>
+
+    <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:var(--gap)">
+
+        <!-- Difficulty + new game -->
+        <div class="card" style="display:flex;align-items:center;gap:8px;padding:12px 14px">
+            <span class="label-meta" style="margin-right:4px">Difficulty</span>
+            <div style="display:flex;gap:4px;flex:1">
+                @foreach (var d in new[] { "Easy", "Medium", "Hard" })
+                {
+                    <button class="seg @(_difficulty == d ? "active" : "")" @onclick="() => SetDifficulty(d)">@d</button>
+                }
+            </div>
+            <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;color:var(--accent)" @onclick="NewGame">New</button>
+        </div>
+
+        @if (_won)
+        {
+            <div class="card" style="text-align:center;border-color:rgba(94,234,212,0.4);background:rgba(94,234,212,0.08)">
+                <div style="font-size:16px;font-weight:500;color:var(--lucid)">Solved · @_difficulty</div>
+                <button class="btn btn-primary" style="margin-top:10px;padding:8px 18px;font-size:13px" @onclick="NewGame">Play again</button>
+            </div>
+        }
+
+        <!-- 9x9 grid -->
+        <div class="sudoku-grid">
+            @for (int r = 0; r < 9; r++)
+            {
+                @for (int c = 0; c < 9; c++)
+                {
+                    var rr = r; var cc = c;
+                    var v = _board[r, c];
+                    var given = _given[r, c];
+                    var sel = rr == _selRow && cc == _selCol;
+                    var sameRow = _selRow == rr;
+                    var sameCol = _selCol == cc;
+                    var sameBox = _selRow >= 0 && (_selRow / 3 == rr / 3) && (_selCol / 3 == cc / 3);
+                    var conflict = !given && v != 0 && HasConflict(rr, cc);
+                    var cls = "sk-cell";
+                    if (sel) cls += " sk-sel";
+                    else if (sameRow || sameCol || sameBox) cls += " sk-peer";
+                    if ((rr % 3 == 0) && rr != 0) cls += " sk-top";
+                    if ((cc % 3 == 0) && cc != 0) cls += " sk-left";
+                    if (given) cls += " sk-given";
+                    if (conflict) cls += " sk-bad";
+
+                    <div class="@cls" @onclick="() => Select(rr, cc)">
+                        @if (v != 0) { @v }
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- Number pad -->
+        <div class="sk-pad">
+            @for (int n = 1; n <= 9; n++)
+            {
+                var num = n;
+                <button class="sk-key" @onclick="() => Place(num)">@num</button>
+            }
+            <button class="sk-key sk-key-wide" @onclick="ClearCell">⌫ clear</button>
+        </div>
+    </div>
+</div>
+
+@if (_showInfo)
+{
+    <div class="game-info-backdrop" @onclick="() => _showInfo = false">
+        <div class="game-info-card" @onclick:stopPropagation="true">
+            <div style="font-size:16px;font-weight:600;margin-bottom:10px">How to play Sudoku</div>
+            <div style="font-size:13px;color:var(--text-sec);line-height:1.55">
+                Fill every row, every column, and every 3×3 box with the digits 1–9. No digit may repeat
+                inside a row, column, or box. Tap a blank cell, then pick a number from the pad.
+                Conflicts glow red; given numbers can't be changed. Solve all 81 cells to win.
+            </div>
+            <button class="btn btn-primary" style="margin-top:16px;width:100%" @onclick="() => _showInfo = false">Got it</button>
+        </div>
+    </div>
+}
+
+<style>
+.sudoku-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 0;
+    background: var(--border);
+    border: 2px solid var(--text-ter);
+    border-radius: 8px;
+    overflow: hidden;
+    user-select: none;
+}
+.sk-cell {
+    aspect-ratio: 1;
+    background: rgba(19,24,41,0.6);
+    color: var(--text-pri);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 18px;
+    border: 1px solid rgba(255,255,255,0.04);
+    cursor: pointer;
+    transition: background 80ms;
+}
+.sk-given { color: var(--text-sec); font-weight: 600; }
+.sk-peer { background: rgba(107,138,255,0.07); }
+.sk-sel  { background: rgba(107,138,255,0.28); outline: 1px solid var(--accent); z-index:1; }
+.sk-bad  { color: var(--warn); background: rgba(248,113,113,0.12); }
+.sk-top  { border-top: 2px solid var(--text-ter); }
+.sk-left { border-left: 2px solid var(--text-ter); }
+
+.sk-pad {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+}
+.sk-key {
+    padding: 14px 0;
+    background: rgba(26,32,56,0.55);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-pri);
+    font-family: var(--font-mono);
+    font-size: 18px;
+    cursor: pointer;
+}
+.sk-key:active { background: var(--accent-soft); }
+.sk-key-wide { grid-column: span 5; font-size: 13px; color: var(--text-sec); }
+
+.seg {
+    flex: 1;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 8px;
+    color: var(--text-sec);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.seg.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+.game-info-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(5, 8, 18, 0.78);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    z-index: 1000;
+}
+.game-info-card {
+    background: var(--bg-card, rgba(19,24,41,0.96));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    max-width: 360px;
+    width: 100%;
+}
+</style>
+
+@code {
+    private readonly int[,] _solution = new int[9, 9];
+    private readonly int[,] _board = new int[9, 9];
+    private readonly bool[,] _given = new bool[9, 9];
+    private int _selRow = -1, _selCol = -1;
+    private string _difficulty = "Easy";
+    private bool _showInfo;
+    private bool _won;
+    private readonly Random _rng = new();
+
+    protected override void OnInitialized() => NewGame();
+
+    private void SetDifficulty(string d)
+    {
+        _difficulty = d;
+        NewGame();
+    }
+
+    private void NewGame()
+    {
+        GenerateSolution();
+        var removeCount = _difficulty switch
+        {
+            "Easy" => 41,
+            "Medium" => 49,
+            "Hard" => 57,
+            _ => 41,
+        };
+        for (var r = 0; r < 9; r++)
+            for (var c = 0; c < 9; c++)
+            {
+                _board[r, c] = _solution[r, c];
+                _given[r, c] = true;
+            }
+
+        var removed = 0;
+        var safety = 0;
+        while (removed < removeCount && safety++ < 500)
+        {
+            var r = _rng.Next(9);
+            var c = _rng.Next(9);
+            if (!_given[r, c]) continue;
+            _given[r, c] = false;
+            _board[r, c] = 0;
+            removed++;
+        }
+        _won = false;
+        _selRow = _selCol = -1;
+    }
+
+    private void GenerateSolution()
+    {
+        // Start from a canonical solved Sudoku, then shuffle in ways that preserve validity:
+        // swap rows inside a band, columns inside a stack, and entire bands/stacks against each other.
+        var b = new int[9, 9];
+        for (var r = 0; r < 9; r++)
+            for (var c = 0; c < 9; c++)
+                b[r, c] = ((r * 3 + r / 3 + c) % 9) + 1;
+
+        for (var band = 0; band < 3; band++)
+            for (var i = 0; i < 4; i++)
+            {
+                int r1 = band * 3 + _rng.Next(3), r2 = band * 3 + _rng.Next(3);
+                for (var c = 0; c < 9; c++) (b[r1, c], b[r2, c]) = (b[r2, c], b[r1, c]);
+            }
+        for (var stack = 0; stack < 3; stack++)
+            for (var i = 0; i < 4; i++)
+            {
+                int c1 = stack * 3 + _rng.Next(3), c2 = stack * 3 + _rng.Next(3);
+                for (var r = 0; r < 9; r++) (b[r, c1], b[r, c2]) = (b[r, c2], b[r, c1]);
+            }
+        for (var i = 0; i < 4; i++)
+        {
+            int b1 = _rng.Next(3), b2 = _rng.Next(3);
+            for (var rr = 0; rr < 3; rr++)
+                for (var c = 0; c < 9; c++)
+                    (b[b1 * 3 + rr, c], b[b2 * 3 + rr, c]) = (b[b2 * 3 + rr, c], b[b1 * 3 + rr, c]);
+        }
+        for (var i = 0; i < 4; i++)
+        {
+            int s1 = _rng.Next(3), s2 = _rng.Next(3);
+            for (var cc = 0; cc < 3; cc++)
+                for (var r = 0; r < 9; r++)
+                    (b[r, s1 * 3 + cc], b[r, s2 * 3 + cc]) = (b[r, s2 * 3 + cc], b[r, s1 * 3 + cc]);
+        }
+        // Relabel digits so the same canonical pattern isn't immediately recognizable.
+        var perm = Enumerable.Range(1, 9).OrderBy(_ => _rng.Next()).ToArray();
+        for (var r = 0; r < 9; r++)
+            for (var c = 0; c < 9; c++)
+                _solution[r, c] = perm[b[r, c] - 1];
+    }
+
+    private void Select(int r, int c)
+    {
+        if (_given[r, c]) { _selRow = r; _selCol = c; return; }
+        _selRow = r;
+        _selCol = c;
+    }
+
+    private void Place(int n)
+    {
+        if (_selRow < 0 || _given[_selRow, _selCol]) return;
+        _board[_selRow, _selCol] = n;
+        CheckWin();
+    }
+
+    private void ClearCell()
+    {
+        if (_selRow < 0 || _given[_selRow, _selCol]) return;
+        _board[_selRow, _selCol] = 0;
+    }
+
+    private bool HasConflict(int r, int c)
+    {
+        var v = _board[r, c];
+        if (v == 0) return false;
+        for (var i = 0; i < 9; i++)
+        {
+            if (i != c && _board[r, i] == v) return true;
+            if (i != r && _board[i, c] == v) return true;
+        }
+        int br = r / 3 * 3, bc = c / 3 * 3;
+        for (var rr = br; rr < br + 3; rr++)
+            for (var cc = bc; cc < bc + 3; cc++)
+                if ((rr != r || cc != c) && _board[rr, cc] == v) return true;
+        return false;
+    }
+
+    private void CheckWin()
+    {
+        for (var r = 0; r < 9; r++)
+            for (var c = 0; c < 9; c++)
+            {
+                if (_board[r, c] == 0) return;
+                if (HasConflict(r, c)) return;
+            }
+        _won = true;
+    }
+}

@@ -1,0 +1,290 @@
+@page "/games/mines"
+@inject NavigationManager Nav
+
+<div class="screen screen-enter">
+    <header class="appbar">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/sleep")' aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div style="flex:1">
+            <span class="subtitle">Game</span>
+            <h1 style="font-size:22px">Mines</h1>
+        </div>
+        <button class="btn btn-ghost" style="padding:8px" @onclick="() => _showInfo = true" aria-label="How to play">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-sec)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg>
+        </button>
+    </header>
+
+    <div style="padding:0 var(--pad-x) 24px;display:flex;flex-direction:column;gap:var(--gap)">
+
+        <!-- Difficulty + status bar -->
+        <div class="card" style="display:flex;align-items:center;gap:8px;padding:12px 14px">
+            <span class="label-meta" style="margin-right:4px">Size</span>
+            <div style="display:flex;gap:4px;flex:1">
+                <button class="seg @(_diff == Difficulty.Easy ? "active" : "")" @onclick="() => SetDifficulty(Difficulty.Easy)">Easy</button>
+                <button class="seg @(_diff == Difficulty.Medium ? "active" : "")" @onclick="() => SetDifficulty(Difficulty.Medium)">Med</button>
+                <button class="seg @(_diff == Difficulty.Hard ? "active" : "")" @onclick="() => SetDifficulty(Difficulty.Hard)">Hard</button>
+            </div>
+            <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;color:var(--accent)" @onclick="NewGame">New</button>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px">
+            <div class="mono" style="font-size:13px;color:var(--text-sec)">
+                <span style="color:var(--warn)">⚑</span> @FlagCount / @_mines
+            </div>
+            <button class="btn @(_flagMode ? "btn-primary" : "")" style="padding:6px 14px;font-size:12px"
+                    @onclick="() => _flagMode = !_flagMode">
+                @(_flagMode ? "Flag mode ON" : "Flag mode")
+            </button>
+        </div>
+
+        @if (_gameOver)
+        {
+            <div class="card" style="text-align:center;border-color:@(_won ? "rgba(94,234,212,0.4)" : "rgba(248,113,113,0.4)");background:@(_won ? "rgba(94,234,212,0.08)" : "rgba(248,113,113,0.08)")">
+                <div style="font-size:16px;font-weight:500;color:@(_won ? "var(--lucid)" : "var(--warn)")">
+                    @(_won ? "Cleared!" : "Boom — you hit a mine.")
+                </div>
+                <button class="btn btn-primary" style="margin-top:10px;padding:8px 18px;font-size:13px" @onclick="NewGame">Play again</button>
+            </div>
+        }
+
+        <!-- Grid -->
+        <div class="mines-wrap">
+            <div class="mines-grid" style="grid-template-columns:repeat(@_cols, 1fr)">
+                @for (var r = 0; r < _rows; r++)
+                {
+                    @for (var c = 0; c < _cols; c++)
+                    {
+                        var rr = r; var cc = c;
+                        var revealed = _revealed[rr, cc];
+                        var flagged = _flag[rr, cc];
+                        var mine = _mine[rr, cc];
+                        var adj = _adj[rr, cc];
+                        var cls = "mn-cell";
+                        if (revealed) cls += " mn-open";
+                        if (revealed && mine) cls += " mn-mine";
+                        <div class="@cls" @onclick="() => Tap(rr, cc)">
+                            @if (revealed)
+                            {
+                                if (mine) { <span>💣</span> }
+                                else if (adj > 0) { <span class="@($"mn-n{adj}")">@adj</span> }
+                            }
+                            else if (flagged)
+                            {
+                                <span style="color:var(--warn)">⚑</span>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (_showInfo)
+{
+    <div class="game-info-backdrop" @onclick="() => _showInfo = false">
+        <div class="game-info-card" @onclick:stopPropagation="true">
+            <div style="font-size:16px;font-weight:600;margin-bottom:10px">How to play Mines</div>
+            <div style="font-size:13px;color:var(--text-sec);line-height:1.55">
+                Uncover every cell that isn't a mine. Numbers tell you how many of the eight neighbours
+                hide a mine — use them to deduce safe cells. Turn on <b>Flag mode</b> to mark suspected
+                mines instead of revealing them. Your first tap is always safe. Hit a mine and the round ends.
+            </div>
+            <button class="btn btn-primary" style="margin-top:16px;width:100%" @onclick="() => _showInfo = false">Got it</button>
+        </div>
+    </div>
+}
+
+<style>
+.mines-wrap { display:flex; justify-content:center; }
+.mines-grid {
+    display: grid;
+    gap: 2px;
+    background: var(--border);
+    padding: 2px;
+    border-radius: 8px;
+    width: 100%;
+    max-width: 360px;
+    user-select: none;
+}
+.mn-cell {
+    aspect-ratio: 1;
+    background: rgba(40,46,72,0.7);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    cursor: pointer;
+}
+.mn-cell:active { background: rgba(60,70,100,0.7); }
+.mn-open { background: rgba(19,24,41,0.4); border-color: rgba(255,255,255,0.02); }
+.mn-mine { background: rgba(248,113,113,0.25); }
+.mn-n1 { color: #6b8aff; } .mn-n2 { color: #5eead4; }
+.mn-n3 { color: #fbbf24; } .mn-n4 { color: #f87171; }
+.mn-n5 { color: #f472b6; } .mn-n6 { color: #a78bfa; }
+.mn-n7 { color: #fb7185; } .mn-n8 { color: #fff; }
+
+.seg {
+    flex: 1;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 8px;
+    color: var(--text-sec);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.seg.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+.game-info-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(5, 8, 18, 0.78);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 1000;
+}
+.game-info-card {
+    background: rgba(19,24,41,0.96);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px; max-width: 360px; width: 100%;
+}
+</style>
+
+@code {
+    private enum Difficulty { Easy, Medium, Hard }
+
+    private Difficulty _diff = Difficulty.Easy;
+    private int _cols = 6, _rows = 10, _mines = 8;
+    private bool[,] _mine = new bool[0, 0];
+    private bool[,] _revealed = new bool[0, 0];
+    private bool[,] _flag = new bool[0, 0];
+    private int[,] _adj = new int[0, 0];
+    private bool _placed;
+    private bool _gameOver;
+    private bool _won;
+    private bool _flagMode;
+    private bool _showInfo;
+    private readonly Random _rng = new();
+
+    private int FlagCount
+    {
+        get
+        {
+            var n = 0;
+            for (var r = 0; r < _rows; r++)
+                for (var c = 0; c < _cols; c++)
+                    if (_flag[r, c]) n++;
+            return n;
+        }
+    }
+
+    protected override void OnInitialized() => NewGame();
+
+    private void SetDifficulty(Difficulty d) { _diff = d; NewGame(); }
+
+    private void NewGame()
+    {
+        (_cols, _rows, _mines) = _diff switch
+        {
+            Difficulty.Easy => (6, 10, 8),
+            Difficulty.Medium => (7, 14, 22),
+            Difficulty.Hard => (8, 18, 45),
+            _ => (6, 10, 8),
+        };
+        _mine = new bool[_rows, _cols];
+        _revealed = new bool[_rows, _cols];
+        _flag = new bool[_rows, _cols];
+        _adj = new int[_rows, _cols];
+        _placed = false;
+        _gameOver = false;
+        _won = false;
+        _flagMode = false;
+    }
+
+    private void PlaceMines(int safeRow, int safeCol)
+    {
+        var placed = 0;
+        while (placed < _mines)
+        {
+            var r = _rng.Next(_rows);
+            var c = _rng.Next(_cols);
+            if (_mine[r, c]) continue;
+            // Keep the first tap and its eight neighbours mine-free so an opening always cascades.
+            if (Math.Abs(r - safeRow) <= 1 && Math.Abs(c - safeCol) <= 1) continue;
+            _mine[r, c] = true;
+            placed++;
+        }
+        for (var r = 0; r < _rows; r++)
+            for (var c = 0; c < _cols; c++)
+            {
+                var n = 0;
+                for (var dr = -1; dr <= 1; dr++)
+                    for (var dc = -1; dc <= 1; dc++)
+                    {
+                        if (dr == 0 && dc == 0) continue;
+                        int rr = r + dr, cc = c + dc;
+                        if (rr < 0 || rr >= _rows || cc < 0 || cc >= _cols) continue;
+                        if (_mine[rr, cc]) n++;
+                    }
+                _adj[r, c] = n;
+            }
+        _placed = true;
+    }
+
+    private void Tap(int r, int c)
+    {
+        if (_gameOver) return;
+        if (_flagMode)
+        {
+            if (_revealed[r, c]) return;
+            _flag[r, c] = !_flag[r, c];
+            return;
+        }
+        if (_flag[r, c]) return;
+        if (!_placed) PlaceMines(r, c);
+        Reveal(r, c);
+        if (!_gameOver) CheckWin();
+    }
+
+    private void Reveal(int r, int c)
+    {
+        var stack = new Stack<(int r, int c)>();
+        stack.Push((r, c));
+        while (stack.Count > 0)
+        {
+            var (rr, cc) = stack.Pop();
+            if (rr < 0 || rr >= _rows || cc < 0 || cc >= _cols) continue;
+            if (_revealed[rr, cc] || _flag[rr, cc]) continue;
+            _revealed[rr, cc] = true;
+            if (_mine[rr, cc]) { _gameOver = true; _won = false; RevealAllMines(); return; }
+            if (_adj[rr, cc] != 0) continue;
+            for (var dr = -1; dr <= 1; dr++)
+                for (var dc = -1; dc <= 1; dc++)
+                {
+                    if (dr == 0 && dc == 0) continue;
+                    stack.Push((rr + dr, cc + dc));
+                }
+        }
+    }
+
+    private void RevealAllMines()
+    {
+        for (var r = 0; r < _rows; r++)
+            for (var c = 0; c < _cols; c++)
+                if (_mine[r, c]) _revealed[r, c] = true;
+    }
+
+    private void CheckWin()
+    {
+        for (var r = 0; r < _rows; r++)
+            for (var c = 0; c < _cols; c++)
+                if (!_mine[r, c] && !_revealed[r, c]) return;
+        _won = true;
+        _gameOver = true;
+    }
+}

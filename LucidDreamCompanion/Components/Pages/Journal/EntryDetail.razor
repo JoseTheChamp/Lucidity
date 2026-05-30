@@ -1,6 +1,7 @@
 @page "/journal/entry/{Id:int}"
 @inject IDreamJournalService Journal
 @inject IStatsService Stats
+@inject ISleepSessionService Sessions
 @inject NavigationManager Nav
 
 <div class="screen screen-enter">
@@ -40,6 +41,19 @@
                     </div>
                 </div>
             }
+            @if (_session is not null && !string.IsNullOrWhiteSpace(_session.Aim))
+            {
+                <div class="card" style="padding:12px 14px;border-color:rgba(167,139,250,0.3);background:rgba(167,139,250,0.06);cursor:pointer"
+                     @onclick="OpenSession">
+                    <div style="display:flex;align-items:flex-start;gap:8px">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--lavender)" stroke-width="1.7" style="flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
+                        <div>
+                            <div class="label-meta" style="color:var(--lavender)">Night's aim</div>
+                            <div style="font-size:13px;color:var(--text-pri);margin-top:3px;line-height:1.45">@_session.Aim</div>
+                        </div>
+                    </div>
+                </div>
+            }
             <h1 style="margin:0;font-size:24px;letter-spacing:-0.3px">@(string.IsNullOrWhiteSpace(_entry.Title) ? "(untitled)" : _entry.Title)</h1>
             <div style="white-space:pre-wrap;font-size:15px;line-height:1.6;color:var(--text-pri)">@_entry.Body</div>
             @if (_entry.Tags.Count > 0)
@@ -60,12 +74,16 @@
 @code {
     [Parameter] public int Id { get; set; }
     private DreamEntry? _entry;
+    private SleepSession? _session;
     private bool _isFirstLucid;
     private ConfirmDialog? _confirm;
 
     protected override async Task OnParametersSetAsync()
     {
         _entry = await Journal.GetAsync(Id);
+        _session = _entry?.SleepSessionId is { } sid
+            ? await Sessions.GetAsync(sid)
+            : null;
         if (_entry is { Lucidity: >= LucidityLevel.BriefLucidity })
         {
             var firstId = await Stats.GetFirstLucidEntryIdAsync();
@@ -78,6 +96,11 @@
     }
 
     private void Edit() => Nav.NavigateTo($"/journal/edit/{Id}");
+
+    private void OpenSession()
+    {
+        if (_session is not null) Nav.NavigateTo($"/sleep/history/{_session.Id}");
+    }
 
     private async Task Delete()
     {

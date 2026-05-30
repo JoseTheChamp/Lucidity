@@ -8,6 +8,8 @@ public record AudioPlaybackOptions
     public int FadeInSeconds { get; init; } = 0;
     public int LoopCount { get; init; } = 1;
     public string? VibrationPattern { get; init; }   // CSV ms, e.g. "0,200,100,200"
+    public bool LoopForever { get; init; }            // alarm: loop until explicitly stopped
+    public bool RepeatVibration { get; init; }        // alarm: repeat the vibration pattern, not one-shot
 }
 
 public class PlaybackEventArgs : EventArgs

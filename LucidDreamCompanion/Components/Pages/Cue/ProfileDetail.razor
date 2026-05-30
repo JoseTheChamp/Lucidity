@@ -62,6 +62,10 @@
                                  @onclick="() => { if (!_profile.IsTechniqueTemplate) EditCue(cue.Id); }">
                                 <div style="display:flex;align-items:center;gap:8px">
                                     <span style="font-size:14px;font-weight:500">@(string.IsNullOrWhiteSpace(cue.Label) ? "Untitled cue" : cue.Label)</span>
+                                    @if (cue.IsAlarm)
+                                    {
+                                        <span class="pill" style="border-color:rgba(248,113,113,0.4);color:var(--warn)">alarm</span>
+                                    }
                                     @if (!cue.Enabled)
                                     {
                                         <span class="pill">off</span>
@@ -86,7 +90,10 @@
 
             @if (!_profile.IsTechniqueTemplate)
             {
-                <button class="btn" @onclick="AddCue">+ Add cue</button>
+                <div style="display:flex;gap:8px">
+                    <button class="btn" style="flex:1" @onclick="AddCue">+ Add cue</button>
+                    <button class="btn" style="flex:1" @onclick="AddAlarm">+ Add alarm</button>
+                </div>
             }
             else
             {
@@ -158,6 +165,12 @@
         Nav.NavigateTo($"/cues/profiles/{Id}/cue/{cue.Id}");
     }
 
+    private async Task AddAlarm()
+    {
+        var cue = await Profiles.AddCueAsync(Id, isAlarm: true);
+        Nav.NavigateTo($"/cues/profiles/{Id}/cue/{cue.Id}");
+    }
+
     private async Task Move(int cueId, int dir) => await Profiles.MoveCueAsync(cueId, dir);
 
     private async Task DuplicateToEdit()
@@ -225,11 +238,12 @@
                 ? $"Every {(int)(c.IntervalEvery?.TotalMinutes ?? 0)}m · {s:HH:mm}–{e:HH:mm}"
                 : "Interval (unset)",
             CueTriggerMode.SleepRelative => c.OffsetFromSleepStart is { } o
-                ? $"Sleep +{(int)o.TotalHours}h{o.Minutes:D2}m (Phase 5)"
-                : "Sleep-relative (Phase 5)",
+                ? $"Sleep +{(int)o.TotalHours}h{o.Minutes:D2}m"
+                : "Sleep-relative (unset)",
             _ => "—"
         };
-        return $"{trigger} · {c.AudioAsset?.DisplayName ?? "no audio"} · {c.VolumePercent}%";
+        var tail = c.IsAlarm ? " · rings until dismissed" : "";
+        return $"{trigger} · {c.AudioAsset?.DisplayName ?? "no audio"} · {c.VolumePercent}%{tail}";
     }
 
     public void Dispose()

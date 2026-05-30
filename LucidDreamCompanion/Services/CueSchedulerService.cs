@@ -16,12 +16,19 @@ public class CueSchedulerService : ICueSchedulerService
     public const int StopAlarmRequestCode = 990001;
     public const string PrefSleepStart = "cue.sleepStartUtc";
 
+    // Dedicated request-code range for private-mode reality-check audio alarms.
+    private const int RcAudioBaseId = 4000;
+    private const int RcAudioMaxIds = 200;
+
     private const int MaxCuesPerActivation = 60;
 
     private readonly IDbContextFactory<LucidDbContext> _dbFactory;
     private readonly IAppSettingsService _settings;
     private readonly IAudioService _audio;
     private readonly ILogger<CueSchedulerService> _logger;
+
+    // Handle of the alarm currently ringing-until-dismissed, if any.
+    private int _activeAlarmHandle;
 
     public event Action? ActiveProfileChanged;
 
@@ -74,6 +81,7 @@ public class CueSchedulerService : ICueSchedulerService
                     CueLabel = string.IsNullOrWhiteSpace(cue.Label) ? "Cue" : cue.Label,
                     ScheduledFor = fireLocal.ToUniversalTime(),
                     Status = CueLogStatus.Scheduled,
+                    IsAlarm = cue.IsAlarm,
                 });
                 if (logs.Count >= MaxCuesPerActivation) break;
             }
@@ -88,7 +96,7 @@ public class CueSchedulerService : ICueSchedulerService
 
         foreach (var log in logs)
         {
-            PlatformArmAlarm(log.Id, log.ScheduledFor, isStop: false);
+            PlatformArmAlarm(log.Id, log.ScheduledFor, isStop: false, isAlarm: log.IsAlarm);
         }
 
         if (logs.Count > 0)
@@ -109,13 +117,16 @@ public class CueSchedulerService : ICueSchedulerService
 
     public async Task DeactivateAsync()
     {
+        // Silence a ringing WBTB alarm so it doesn't loop on after the night ends or is corrected.
+        if (_activeAlarmHandle > 0) await StopAlarmAsync();
+
         await using var db = await _dbFactory.CreateDbContextAsync();
         var pending = await db.ScheduledCueLogs
             .Where(l => l.Status == CueLogStatus.Scheduled)
             .ToListAsync();
         foreach (var log in pending)
         {
-            PlatformCancelAlarm(log.Id, isStop: false);
+            PlatformCancelAlarm(log.Id, isStop: false, isAlarm: log.IsAlarm);
             log.Status = CueLogStatus.Cancelled;
         }
         PlatformCancelAlarm(StopAlarmRequestCode, isStop: true);
@@ -148,7 +159,7 @@ public class CueSchedulerService : ICueSchedulerService
         }
         foreach (var log in pending)
         {
-            PlatformArmAlarm(log.Id, log.ScheduledFor, isStop: false);
+            PlatformArmAlarm(log.Id, log.ScheduledFor, isStop: false, isAlarm: log.IsAlarm);
         }
         PlatformArmAlarm(StopAlarmRequestCode, pending.Max(l => l.ScheduledFor).AddMinutes(30), isStop: true);
         PlatformStartMonitor();
@@ -226,6 +237,120 @@ public class CueSchedulerService : ICueSchedulerService
         await db.SaveChangesAsync();
     }
 
+    public async Task PlayAlarmByLogAsync(int logId)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var log = await db.ScheduledCueLogs.FirstOrDefaultAsync(l => l.Id == logId);
+        if (log is null)
+        {
+            _logger.LogWarning("PlayAlarmByLogAsync: log {Id} not found", logId);
+            return;
+        }
+        var cue = await db.AudioCues
+            .Include(c => c.AudioAsset)
+            .FirstOrDefaultAsync(c => c.Id == log.AudioCueId);
+        if (cue?.AudioAsset is null)
+        {
+            log.Status = CueLogStatus.Failed;
+            await db.SaveChangesAsync();
+            _logger.LogWarning("PlayAlarmByLogAsync: cue/asset missing for log {Id}", logId);
+            return;
+        }
+
+        // Stop any audio already playing (a previous cue) so the alarm isn't muddled.
+        await _audio.StopAllAsync();
+
+        var handle = await _audio.PlayAsync(cue.AudioAsset, new AudioPlaybackOptions
+        {
+            VolumePercent = cue.VolumePercent,
+            FadeInSeconds = cue.FadeInSeconds,
+            LoopForever = true,
+            RepeatVibration = true,
+            VibrationPattern = string.IsNullOrWhiteSpace(cue.VibrationPattern) ? "0,800,400,800" : cue.VibrationPattern,
+        });
+
+        if (handle > 0)
+        {
+            _activeAlarmHandle = handle;
+            // The alarm has fired; dismissal is a separate user action, so mark it Fired now.
+            log.Status = CueLogStatus.Fired;
+            log.FiredAt = DateTime.UtcNow;
+            _logger.LogInformation("Alarm '{Label}' ringing (log {Id}, handle {H})", log.CueLabel, logId, handle);
+        }
+        else
+        {
+            log.Status = CueLogStatus.Failed;
+            _logger.LogWarning("Alarm playback returned no handle (log {Id}): {Err}", logId, _audio.LastError);
+        }
+        await db.SaveChangesAsync();
+    }
+
+    public async Task StopAlarmAsync()
+    {
+        var handle = _activeAlarmHandle;
+        _activeAlarmHandle = 0;
+        if (handle > 0)
+            await _audio.StopAsync(handle);
+        else
+            await _audio.StopAllAsync();
+        _logger.LogInformation("Alarm dismissed (handle {H})", handle);
+    }
+
+    public async Task ScheduleRealityCheckAudioAsync(IReadOnlyList<DateTime> localTimes, int audioAssetId, int volumePercent)
+    {
+        await CancelRealityCheckAudioAsync();
+        if (audioAssetId <= 0) return;
+
+        var now = DateTime.Now;
+        var i = 0;
+        foreach (var local in localTimes)
+        {
+            if (local <= now.AddSeconds(2)) continue;
+            if (i >= RcAudioMaxIds) break;
+            PlatformArmRcAudioAlarm(RcAudioBaseId + i, local.ToUniversalTime(), audioAssetId, volumePercent);
+            i++;
+        }
+        _logger.LogInformation("Armed {N} private reality-check audio pings", i);
+    }
+
+    public Task CancelRealityCheckAudioAsync()
+    {
+        for (var i = 0; i < RcAudioMaxIds; i++)
+        {
+            PlatformCancelRcAudioAlarm(RcAudioBaseId + i);
+        }
+        return Task.CompletedTask;
+    }
+
+    public async Task PlayRealityCheckAudioAsync(int audioAssetId, int volumePercent)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var asset = await db.AudioAssets.FirstOrDefaultAsync(a => a.Id == audioAssetId);
+        if (asset is null)
+        {
+            _logger.LogWarning("PlayRealityCheckAudioAsync: asset {Id} missing", audioAssetId);
+            return;
+        }
+        try
+        {
+            var handle = await _audio.PlayAsync(asset, new AudioPlaybackOptions
+            {
+                VolumePercent = Math.Clamp(volumePercent, 0, 100),
+                FadeInSeconds = 0,
+                LoopCount = 1,
+            });
+            if (handle > 0)
+            {
+                await WaitForPlaybackAsync(handle, timeoutMs: 30_000);
+                _logger.LogInformation("Private reality-check sound played ({Asset})", asset.DisplayName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Private reality-check playback failed");
+        }
+    }
+
     private Task WaitForPlaybackAsync(int handle, int timeoutMs)
     {
         var tcs = new TaskCompletionSource();
@@ -260,9 +385,23 @@ public class CueSchedulerService : ICueSchedulerService
                 if (cue.IntervalStart is { } s && cue.IntervalEnd is { } e &&
                     cue.IntervalEvery is { } every && every > TimeSpan.Zero)
                 {
-                    var startAbs = NextAfter(referenceLocal, s);
                     var windowLen = e >= s ? (e - s) : (TimeSpan.FromDays(1) - (s - e));
+                    // Pick the earliest interval window that hasn't fully ended. If the window
+                    // already began before "Start Sleep" was pressed, this still picks it so its
+                    // remaining ticks fire (past ticks are dropped later by the activation filter).
+                    var startAbs = referenceLocal.Date + s.ToTimeSpan();
                     var endAbs = startAbs + windowLen;
+                    for (var dayOffset = -1; dayOffset <= 1; dayOffset++)
+                    {
+                        var candStart = referenceLocal.Date.AddDays(dayOffset) + s.ToTimeSpan();
+                        var candEnd = candStart + windowLen;
+                        if (candEnd > referenceLocal)
+                        {
+                            startAbs = candStart;
+                            endAbs = candEnd;
+                            break;
+                        }
+                    }
                     var t = startAbs;
                     var count = 0;
                     while (t <= endAbs && count < MaxCuesPerActivation)
@@ -341,22 +480,27 @@ public class CueSchedulerService : ICueSchedulerService
         catch (Exception ex) { _logger.LogWarning(ex, "Could not open battery-optimization settings"); }
     }
 
-    private static PendingIntent? BuildAlarmPi(int requestCode, bool isStop)
+    private static PendingIntent? BuildAlarmPi(int requestCode, bool isStop, bool isAlarm)
     {
         var ctx = Android.App.Application.Context;
         var intent = new Intent(ctx, typeof(LucidDreamCompanion.Platforms.Android.Receivers.CueAlarmReceiver));
-        intent.SetAction(isStop ? "com.josef.lucid.cue.STOP" : "com.josef.lucid.cue.FIRE");
+        var action = isStop
+            ? LucidDreamCompanion.Platforms.Android.Receivers.CueAlarmReceiver.ActionStop
+            : isAlarm
+                ? LucidDreamCompanion.Platforms.Android.Receivers.CueAlarmReceiver.ActionAlarm
+                : LucidDreamCompanion.Platforms.Android.Receivers.CueAlarmReceiver.ActionFire;
+        intent.SetAction(action);
         if (!isStop) intent.PutExtra("logId", requestCode);
         return PendingIntent.GetBroadcast(ctx, requestCode, intent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }
 
-    private void PlatformArmAlarm(int requestCode, DateTime triggerUtc, bool isStop)
+    private void PlatformArmAlarm(int requestCode, DateTime triggerUtc, bool isStop, bool isAlarm = false)
     {
         try
         {
             var am = (AlarmManager?)Android.App.Application.Context.GetSystemService(AContext.AlarmService);
-            var pi = BuildAlarmPi(requestCode, isStop);
+            var pi = BuildAlarmPi(requestCode, isStop, isAlarm);
             if (am is null || pi is null) return;
             var triggerMs = new DateTimeOffset(triggerUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
             am.SetExactAndAllowWhileIdle(AlarmType.RtcWakeup, triggerMs, pi);
@@ -367,12 +511,12 @@ public class CueSchedulerService : ICueSchedulerService
         }
     }
 
-    private void PlatformCancelAlarm(int requestCode, bool isStop)
+    private void PlatformCancelAlarm(int requestCode, bool isStop, bool isAlarm = false)
     {
         try
         {
             var am = (AlarmManager?)Android.App.Application.Context.GetSystemService(AContext.AlarmService);
-            var pi = BuildAlarmPi(requestCode, isStop);
+            var pi = BuildAlarmPi(requestCode, isStop, isAlarm);
             if (am is not null && pi is not null) am.Cancel(pi);
         }
         catch (Exception ex)
@@ -403,14 +547,59 @@ public class CueSchedulerService : ICueSchedulerService
         }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to stop cue monitor service"); }
     }
+
+    private static PendingIntent? BuildRcAudioPi(int requestCode, int audioAssetId, int volumePercent)
+    {
+        var ctx = Android.App.Application.Context;
+        var intent = new Intent(ctx, typeof(LucidDreamCompanion.Platforms.Android.Receivers.CueAlarmReceiver));
+        intent.SetAction(LucidDreamCompanion.Platforms.Android.Receivers.CueAlarmReceiver.ActionRcAudio);
+        intent.PutExtra("rcAsset", audioAssetId);
+        intent.PutExtra("rcVolume", volumePercent);
+        return PendingIntent.GetBroadcast(ctx, requestCode, intent,
+            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+    }
+
+    private void PlatformArmRcAudioAlarm(int requestCode, DateTime triggerUtc, int audioAssetId, int volumePercent)
+    {
+        try
+        {
+            var am = (AlarmManager?)Android.App.Application.Context.GetSystemService(AContext.AlarmService);
+            var pi = BuildRcAudioPi(requestCode, audioAssetId, volumePercent);
+            if (am is null || pi is null) return;
+            var triggerMs = new DateTimeOffset(triggerUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            // Inexact, Doze-friendly — reality checks are habit pings, not alarms, so they don't
+            // need exact timing and this needs no SCHEDULE_EXACT_ALARM permission.
+            am.SetAndAllowWhileIdle(AlarmType.RtcWakeup, triggerMs, pi);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to arm reality-check audio alarm {Code}", requestCode);
+        }
+    }
+
+    private void PlatformCancelRcAudioAlarm(int requestCode)
+    {
+        try
+        {
+            var am = (AlarmManager?)Android.App.Application.Context.GetSystemService(AContext.AlarmService);
+            var pi = BuildRcAudioPi(requestCode, 0, 0);
+            if (am is not null && pi is not null) am.Cancel(pi);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to cancel reality-check audio alarm {Code}", requestCode);
+        }
+    }
 #else
     public bool ExactAlarmsAllowed => true;
     public void RequestExactAlarmPermission() { }
     public bool BatteryOptimizationIgnored => true;
     public void RequestBatteryExemption() { }
-    private void PlatformArmAlarm(int requestCode, DateTime triggerUtc, bool isStop) { }
-    private void PlatformCancelAlarm(int requestCode, bool isStop) { }
+    private void PlatformArmAlarm(int requestCode, DateTime triggerUtc, bool isStop, bool isAlarm = false) { }
+    private void PlatformCancelAlarm(int requestCode, bool isStop, bool isAlarm = false) { }
     private void PlatformStartMonitor() { }
     private void PlatformStopMonitor() { }
+    private void PlatformArmRcAudioAlarm(int requestCode, DateTime triggerUtc, int audioAssetId, int volumePercent) { }
+    private void PlatformCancelRcAudioAlarm(int requestCode) { }
 #endif
 }

@@ -36,7 +36,7 @@ public class SleepSessionService : ISleepSessionService
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<SleepSession> StartAsync(int? cueProfileId, CancellationToken ct = default)
+    public async Task<SleepSession> StartAsync(int? cueProfileId, string? aim = null, CancellationToken ct = default)
     {
         var existing = await GetActiveAsync(ct);
         if (existing is not null) return existing;
@@ -48,6 +48,7 @@ public class SleepSessionService : ISleepSessionService
             {
                 StartedAt = DateTime.UtcNow,
                 TechniqueProfileId = cueProfileId,
+                Aim = string.IsNullOrWhiteSpace(aim) ? null : aim.Trim(),
             };
             db.SleepSessions.Add(session);
             await db.SaveChangesAsync(ct);
@@ -82,6 +83,58 @@ public class SleepSessionService : ISleepSessionService
         await _notifications.ShowDreamCaptureAsync();
 
         _logger.LogInformation("Sleep session {Id} ended", sessionId);
+        Changed?.Invoke();
+    }
+
+    public async Task SetAimAsync(int sessionId, string? aim, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var session = await db.SleepSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+        if (session is null) return;
+        session.Aim = string.IsNullOrWhiteSpace(aim) ? null : aim.Trim();
+        await db.SaveChangesAsync(ct);
+        Changed?.Invoke();
+    }
+
+    public async Task SetTimesAsync(int sessionId, DateTime startedAtUtc, DateTime? endedAtUtc, CancellationToken ct = default)
+    {
+        bool isActive;
+        int? profileId;
+        await using (var db = await _dbFactory.CreateDbContextAsync(ct))
+        {
+            var session = await db.SleepSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+            if (session is null) return;
+
+            isActive = session.EndedAt is null;
+            profileId = session.TechniqueProfileId;
+
+            session.StartedAt = startedAtUtc;
+            if (!isActive)
+            {
+                // Guard against an end that lands before the start.
+                if (endedAtUtc is { } e && e < startedAtUtc) endedAtUtc = startedAtUtc;
+                session.EndedAt = endedAtUtc;
+            }
+            await db.SaveChangesAsync(ct);
+        }
+
+        // A running session's cues were armed relative to the old start — re-arm them from the corrected one.
+        if (isActive && profileId is { } pid)
+        {
+            await _scheduler.ActivateProfileAsync(pid, startedAtUtc, sessionId);
+        }
+
+        _logger.LogInformation("Sleep session {Id} times adjusted (start {Start})", sessionId, startedAtUtc);
+        Changed?.Invoke();
+    }
+
+    public async Task SetNotesAsync(int sessionId, string? notes, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var session = await db.SleepSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+        if (session is null) return;
+        session.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        await db.SaveChangesAsync(ct);
         Changed?.Invoke();
     }
 

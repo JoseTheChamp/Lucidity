@@ -15,13 +15,23 @@ public record StatsSnapshot(
     double LucidityRate90d,
     int RealityChecks7d,
     double? RealityCheckRate7d, // null when reality checks are disabled
+    int RecordedNights,         // completed sleep sessions, all-time
     IReadOnlyList<TagCount> TopTags,
     IReadOnlyList<TechniqueStat> Techniques,
     IReadOnlyList<HeatmapDay> Heatmap,
     IReadOnlyList<TrendPoint> Trend);
 
+public enum StatsPeriod { Week, Month, Quarter, Year }
+
+public record SleepAverages(
+    int SessionCount,
+    TimeOnly? AvgBedtime,
+    TimeOnly? AvgWakeTime,
+    TimeSpan? AvgDuration);
+
 public interface IStatsService
 {
     Task<StatsSnapshot> GetSnapshotAsync(CancellationToken ct = default);
     Task<int?> GetFirstLucidEntryIdAsync(CancellationToken ct = default);
+    Task<SleepAverages> GetSleepAveragesAsync(StatsPeriod period, CancellationToken ct = default);
 }

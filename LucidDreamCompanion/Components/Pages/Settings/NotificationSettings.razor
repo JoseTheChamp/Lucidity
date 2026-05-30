@@ -1,8 +1,12 @@
 @page "/settings/notifications"
 @implements IDisposable
+@using Microsoft.EntityFrameworkCore
+@using LucidDreamCompanion.Data
 @inject IAppSettingsService SettingsService
 @inject IJournalReminderService Reminders
 @inject INotificationService Notifications
+@inject IDbContextFactory<LucidDbContext> DbFactory
+@inject IAudioService Audio
 @inject NavigationManager Nav
 
 <div class="screen screen-enter">
@@ -71,9 +75,9 @@
                 {
                     <div style="display:flex;flex-direction:column;gap:10px">
                         <div style="display:flex;gap:6px">
-                            <button class="lucidity-row-btn @(_settings.RealityCheckMode == RealityCheckMode.RandomCountPerDay ? "active" : "")"
-                                    @onclick="() => _settings.RealityCheckMode = RealityCheckMode.RandomCountPerDay">
-                                Random count
+                            <button class="lucidity-row-btn @(_settings.RealityCheckMode == RealityCheckMode.Count ? "active" : "")"
+                                    @onclick="() => _settings.RealityCheckMode = RealityCheckMode.Count">
+                                Count
                             </button>
                             <button class="lucidity-row-btn @(_settings.RealityCheckMode == RealityCheckMode.FixedInterval ? "active" : "")"
                                     @onclick="() => _settings.RealityCheckMode = RealityCheckMode.FixedInterval">
@@ -81,11 +85,12 @@
                             </button>
                         </div>
 
-                        @if (_settings.RealityCheckMode == RealityCheckMode.RandomCountPerDay)
+                        @if (_settings.RealityCheckMode == RealityCheckMode.Count)
                         {
                             <div style="display:flex;align-items:center;gap:10px">
-                                <span class="label-meta" style="width:90px">Pings / day</span>
+                                <span class="label-meta" style="width:90px">Count</span>
                                 <input type="number" min="1" max="20" @bind="_settings.RealityCheckCountPerDay" style="width:90px" class="input" />
+                                <span class="label-meta">evenly spread</span>
                             </div>
                         }
                         else
@@ -103,6 +108,40 @@
                             <span class="label-meta">to</span>
                             <input type="time" value="@_settings.RealityCheckEnd.ToString("HH:mm")" @onchange="e => SetRcEnd(e)" />
                         </div>
+
+                        <div style="height:1px;background:var(--border);margin:2px 0"></div>
+                        <span class="label-meta">Delivery</span>
+                        <div style="display:flex;gap:6px">
+                            <button class="lucidity-row-btn @(_settings.RealityCheckDelivery == RealityCheckDelivery.Notification ? "active" : "")"
+                                    @onclick="() => _settings.RealityCheckDelivery = RealityCheckDelivery.Notification">
+                                Notification
+                            </button>
+                            <button class="lucidity-row-btn @(_settings.RealityCheckDelivery == RealityCheckDelivery.Audio ? "active" : "")"
+                                    @onclick="() => _settings.RealityCheckDelivery = RealityCheckDelivery.Audio">
+                                Private · sound
+                            </button>
+                        </div>
+                        @if (_settings.RealityCheckDelivery == RealityCheckDelivery.Audio)
+                        {
+                            <div style="font-size:11.5px;color:var(--text-ter);line-height:1.45">
+                                No notification shows — the phone quietly plays a sound, so your brain
+                                learns to reality-check whenever it hears it.
+                            </div>
+                            <div style="display:flex;align-items:center;gap:10px">
+                                <span class="label-meta" style="width:90px">Sound</span>
+                                <select class="input" style="flex:1" value="@(_settings.RealityCheckAudioAssetId?.ToString() ?? "")" @onchange="OnRcAudioChanged">
+                                    <option value="">— pick a sound —</option>
+                                    @foreach (var a in _audioAssets)
+                                    {
+                                        <option value="@a.Id">@a.DisplayName</option>
+                                    }
+                                </select>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:10px">
+                                <span class="label-meta" style="width:90px">Volume · @_settings.RealityCheckVolumePercent%</span>
+                                <input type="range" min="0" max="100" step="5" @bind="_settings.RealityCheckVolumePercent" @bind:event="oninput" style="flex:1" />
+                            </div>
+                        }
                         <button class="btn" style="padding:8px 12px;font-size:12px;align-self:flex-start" @onclick="TestRealityCheck">Test reality check</button>
                     </div>
                 }
@@ -139,6 +178,7 @@
 @code {
     private AppSettings? _settings;
     private List<JournalReminder> _reminders = new();
+    private List<AudioAsset> _audioAssets = new();
     private bool _permissionGranted;
     private bool _busy;
     private string _status = "";
@@ -148,7 +188,19 @@
         _settings = await SettingsService.GetAsync();
         _reminders = (await Reminders.ListAsync()).ToList();
         _permissionGranted = await Notifications.AreNotificationsEnabledAsync();
+        await using (var db = await DbFactory.CreateDbContextAsync())
+        {
+            _audioAssets = await db.AudioAssets.AsNoTracking()
+                .OrderBy(a => a.Source).ThenBy(a => a.DisplayName).ToListAsync();
+        }
         Reminders.Changed += OnRemindersChanged;
+    }
+
+    private void OnRcAudioChanged(ChangeEventArgs e)
+    {
+        if (_settings is null) return;
+        _settings.RealityCheckAudioAssetId =
+            int.TryParse(e.Value?.ToString(), out var id) && id > 0 ? id : null;
     }
 
     private async void OnRemindersChanged()
@@ -215,9 +267,32 @@
             if (_settings.RealityCheckCountPerDay > 20) _settings.RealityCheckCountPerDay = 20;
             if (_settings.RealityCheckIntervalMinutes < 5) _settings.RealityCheckIntervalMinutes = 5;
             if (_settings.RealityCheckIntervalMinutes > 600) _settings.RealityCheckIntervalMinutes = 600;
+            _settings.RealityCheckVolumePercent = Math.Clamp(_settings.RealityCheckVolumePercent, 0, 100);
+
+            if (_settings is { RealityCheckEnabled: true, RealityCheckDelivery: RealityCheckDelivery.Audio }
+                && _settings.RealityCheckAudioAssetId is null)
+            {
+                _status = "Pick a sound for private mode first.";
+                return;
+            }
+
             await SettingsService.SaveAsync(_settings);
             await Notifications.RescheduleAllAsync();
-            _status = "Saved";
+
+            if (_settings.RealityCheckEnabled)
+            {
+                var times = NotificationService.ComputeRealityCheckTimes(
+                    DateOnly.FromDateTime(DateTime.Now), _settings);
+                var future = times.Count(t => t > DateTime.Now.AddSeconds(2));
+                var kind = _settings.RealityCheckDelivery == RealityCheckDelivery.Audio ? "sound" : "ping";
+                _status = future > 0
+                    ? $"Saved — {future} reality-check {kind}{(future == 1 ? "" : "s")} queued for today."
+                    : "Saved — no checks left today; the window has already passed. They resume tomorrow.";
+            }
+            else
+            {
+                _status = "Saved";
+            }
         }
         finally
         {
@@ -237,6 +312,24 @@
 
     private async Task TestRealityCheck()
     {
+        if (_settings is { RealityCheckDelivery: RealityCheckDelivery.Audio, RealityCheckAudioAssetId: { } assetId })
+        {
+            var asset = _audioAssets.FirstOrDefault(a => a.Id == assetId);
+            if (asset is null)
+            {
+                _status = "Pick a sound first.";
+                return;
+            }
+            await Audio.StopAllAsync();
+            await Audio.PlayAsync(asset, new AudioPlaybackOptions
+            {
+                VolumePercent = _settings.RealityCheckVolumePercent,
+                LoopCount = 1,
+            });
+            _status = "Played the reality-check sound";
+            return;
+        }
+
         await Notifications.FireTestAsync(
             "Reality check",
             "Are you dreaming? Look at your hands.",

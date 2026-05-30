@@ -28,7 +28,7 @@
                     <div class="entry-row" @onclick="() => Open(row.Session.Id)">
                         <div class="main">
                             <div style="display:flex;align-items:center;justify-content:space-between">
-                                <span class="title">@row.Session.StartedAt.ToLocalTime().ToString("dddd, MMM d")</span>
+                                <span class="title">@row.Session.MainDate.ToString("dddd, MMM d")</span>
                                 <span class="mono" style="font-size:11px;color:var(--text-ter)">@Duration(row.Session)</span>
                             </div>
                             <div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--text-sec)">

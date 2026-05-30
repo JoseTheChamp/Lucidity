@@ -25,4 +25,7 @@ public class ScheduledCueLog
     public DateTime ScheduledFor { get; set; }            // UTC
     public DateTime? FiredAt { get; set; }                // UTC
     public string? Status { get; set; }                   // see CueLogStatus
+
+    // Snapshotted from the cue so a reboot re-arm knows to ring-until-dismissed (see CueSchedulerService).
+    public bool IsAlarm { get; set; }
 }

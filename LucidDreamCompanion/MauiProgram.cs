@@ -43,6 +43,14 @@ public static class MauiProgram
                         Description = "Foreground notification while overnight cues are armed.",
                         Importance = AndroidImportance.Low,
                     });
+                    android.AddChannel(new AndroidNotificationChannelRequest
+                    {
+                        Id = NotificationService.ChannelCueAlarm,
+                        Name = "Wake-up alarm",
+                        Description = "WBTB alarm that rings until you dismiss it.",
+                        Importance = AndroidImportance.High,
+                        VibrationPattern = new long[] { 0, 800, 400, 800 },
+                    });
                 });
             })
             .ConfigureFonts(fonts =>
@@ -81,7 +89,24 @@ public static class MauiProgram
         InitializeDatabaseAsync(app.Services).GetAwaiter().GetResult();
         WireNotificationTapHandler(app.Services);
 
+        // Re-arm reminders and reality-check pings on each launch (covers reboots and daily renewal).
+        _ = RescheduleOnStartupAsync(app.Services);
+
         return app;
+    }
+
+    private static async Task RescheduleOnStartupAsync(IServiceProvider services)
+    {
+        try
+        {
+            var notifications = services.GetRequiredService<INotificationService>();
+            await notifications.RescheduleAllAsync();
+        }
+        catch (Exception ex)
+        {
+            services.GetRequiredService<ILogger<NotificationService>>()
+                .LogWarning(ex, "Startup reschedule failed");
+        }
     }
 
     private static async Task InitializeDatabaseAsync(IServiceProvider services)
@@ -131,18 +156,30 @@ public static class MauiProgram
                 CueLabel TEXT NOT NULL DEFAULT '',
                 ScheduledFor TEXT NOT NULL,
                 FiredAt TEXT NULL,
-                Status TEXT NULL
+                Status TEXT NULL,
+                IsAlarm INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS IX_ScheduledCueLogs_ScheduledFor ON ScheduledCueLogs(ScheduledFor);");
 
         // Phase 4: AudioCue gained a SortOrder column.
         await EnsureColumnAsync(db, "AudioCues", "SortOrder", "INTEGER NOT NULL DEFAULT 0");
 
+        // WBTB alarm: a cue can ring until dismissed; ScheduledCueLogs carries it for boot re-arm.
+        await EnsureColumnAsync(db, "AudioCues", "IsAlarm", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "ScheduledCueLogs", "IsAlarm", "INTEGER NOT NULL DEFAULT 0");
+
         // Phase 5: SleepSession gained a Quality column.
         await EnsureColumnAsync(db, "SleepSessions", "Quality", "INTEGER NULL");
+        // Sleep aim/intention text.
+        await EnsureColumnAsync(db, "SleepSessions", "Aim", "TEXT NULL");
 
         // Phase 6: AppSettings gained a SpeechLocale column.
         await EnsureColumnAsync(db, "AppSettings", "SpeechLocale", "TEXT NOT NULL DEFAULT ''");
+
+        // Reality-check delivery mode (notification vs private audio cue).
+        await EnsureColumnAsync(db, "AppSettings", "RealityCheckDelivery", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "AppSettings", "RealityCheckAudioAssetId", "INTEGER NULL");
+        await EnsureColumnAsync(db, "AppSettings", "RealityCheckVolumePercent", "INTEGER NOT NULL DEFAULT 50");
 
         // Phase 2: AppSettings reality-check mode/interval columns.
         await EnsureColumnAsync(db, "AppSettings", "RealityCheckMode", "INTEGER NOT NULL DEFAULT 0");

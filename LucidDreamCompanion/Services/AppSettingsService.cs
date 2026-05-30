@@ -44,7 +44,12 @@ public class AppSettingsService : IAppSettingsService
             tracked.RealityCheckEnabled = settings.RealityCheckEnabled;
             tracked.RealityCheckStart = settings.RealityCheckStart;
             tracked.RealityCheckEnd = settings.RealityCheckEnd;
+            tracked.RealityCheckMode = settings.RealityCheckMode;
             tracked.RealityCheckCountPerDay = settings.RealityCheckCountPerDay;
+            tracked.RealityCheckIntervalMinutes = settings.RealityCheckIntervalMinutes;
+            tracked.RealityCheckDelivery = settings.RealityCheckDelivery;
+            tracked.RealityCheckAudioAssetId = settings.RealityCheckAudioAssetId;
+            tracked.RealityCheckVolumePercent = settings.RealityCheckVolumePercent;
             tracked.ActiveCueProfileId = settings.ActiveCueProfileId;
             tracked.SpeechLocale = settings.SpeechLocale;
         }

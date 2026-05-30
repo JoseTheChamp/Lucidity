@@ -11,6 +11,7 @@ public class NotificationService : INotificationService
     public const string ChannelJournal      = "journal_reminders";
     public const string ChannelRealityCheck = "reality_checks";
     public const string ChannelCuesActive   = "cues_active";
+    public const string ChannelCueAlarm     = "cue_alarm";
 
     // Stable ID ranges:
     //   1000..1099 reserved for journal reminders (use 1000 + reminder.Id, capped)
@@ -29,15 +30,18 @@ public class NotificationService : INotificationService
     private readonly ILogger<NotificationService> _logger;
     private readonly IAppSettingsService _settings;
     private readonly IJournalReminderService _reminders;
+    private readonly ICueSchedulerService _cueScheduler;
 
     public NotificationService(
         ILogger<NotificationService> logger,
         IAppSettingsService settings,
-        IJournalReminderService reminders)
+        IJournalReminderService reminders,
+        ICueSchedulerService cueScheduler)
     {
         _logger = logger;
         _settings = settings;
         _reminders = reminders;
+        _cueScheduler = cueScheduler;
     }
 
     public async Task<bool> RequestPermissionAsync()
@@ -140,23 +144,30 @@ public class NotificationService : INotificationService
         return Task.CompletedTask;
     }
 
+    /// <summary>Computes the local clock times for today's reality-check pings, both modes share this.</summary>
+    public static IReadOnlyList<DateTime> ComputeRealityCheckTimes(DateOnly date, AppSettings settings)
+    {
+        if (!settings.RealityCheckEnabled) return Array.Empty<DateTime>();
+        if (settings.RealityCheckEnd <= settings.RealityCheckStart) return Array.Empty<DateTime>();
+
+        var startDt = date.ToDateTime(settings.RealityCheckStart);
+        var endDt = date.ToDateTime(settings.RealityCheckEnd);
+        var times = settings.RealityCheckMode switch
+        {
+            RealityCheckMode.FixedInterval => InvervalTimes(startDt, endDt, settings.RealityCheckIntervalMinutes),
+            _                              => EvenlySpacedTimes(startDt, endDt, settings.RealityCheckCountPerDay),
+        };
+        return times.ToList();
+    }
+
     public async Task ScheduleRealityCheckBatchAsync(DateOnly date, AppSettings settings)
     {
         await CancelRealityChecksAsync();
         if (!settings.RealityCheckEnabled) return;
-        if (settings.RealityCheckEnd <= settings.RealityCheckStart) return;
-
-        var startDt = date.ToDateTime(settings.RealityCheckStart);
-        var endDt = date.ToDateTime(settings.RealityCheckEnd);
-        var fireTimes = settings.RealityCheckMode switch
-        {
-            RealityCheckMode.FixedInterval => InvervalTimes(startDt, endDt, settings.RealityCheckIntervalMinutes),
-            _                              => RandomTimes(startDt, endDt, settings.RealityCheckCountPerDay, date.DayNumber),
-        };
 
         var i = 0;
         var now = DateTime.Now;
-        foreach (var fireAt in fireTimes)
+        foreach (var fireAt in ComputeRealityCheckTimes(date, settings))
         {
             if (i >= RealityCheckMaxIds) break;
             if (fireAt <= now) continue;
@@ -187,7 +198,22 @@ public class NotificationService : INotificationService
         await ScheduleJournalRemindersAsync(reminders);
 
         var settings = await _settings.GetAsync();
-        await ScheduleRealityCheckBatchAsync(DateOnly.FromDateTime(DateTime.Now), settings);
+        var date = DateOnly.FromDateTime(DateTime.Now);
+
+        if (settings is { RealityCheckEnabled: true, RealityCheckDelivery: RealityCheckDelivery.Audio }
+            && settings.RealityCheckAudioAssetId is { } assetId)
+        {
+            // Private mode: cancel any notification-style pings, arm audio pings instead.
+            await CancelRealityChecksAsync();
+            var times = ComputeRealityCheckTimes(date, settings);
+            await _cueScheduler.ScheduleRealityCheckAudioAsync(times, assetId, settings.RealityCheckVolumePercent);
+        }
+        else
+        {
+            // Notification mode (or disabled): cancel any audio pings, schedule notifications.
+            await _cueScheduler.CancelRealityCheckAudioAsync();
+            await ScheduleRealityCheckBatchAsync(date, settings);
+        }
     }
 
     public async Task FireTestAsync(string title, string body, string? action = null, string channelId = ChannelJournal)
@@ -207,18 +233,16 @@ public class NotificationService : INotificationService
         await LocalNotificationCenter.Current.Show(req);
     }
 
-    private static IEnumerable<DateTime> RandomTimes(DateTime startDt, DateTime endDt, int count, int seed)
+    /// <summary>Splits the window into <paramref name="count"/> equal slots and pings at each slot's midpoint.</summary>
+    private static IEnumerable<DateTime> EvenlySpacedTimes(DateTime startDt, DateTime endDt, int count)
     {
         if (count <= 0) yield break;
-        var totalSec = (int)(endDt - startDt).TotalSeconds;
+        var totalSec = (endDt - startDt).TotalSeconds;
         if (totalSec <= 0) yield break;
         var slotSec = totalSec / count;
-        if (slotSec <= 0) yield break;
-        var rng = new Random(seed);
         for (var i = 0; i < count; i++)
         {
-            var slotStart = startDt.AddSeconds(slotSec * i);
-            yield return slotStart.AddSeconds(rng.Next(0, slotSec));
+            yield return startDt.AddSeconds(slotSec * (i + 0.5));
         }
     }
 

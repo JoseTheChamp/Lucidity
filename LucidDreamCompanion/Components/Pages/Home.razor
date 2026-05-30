@@ -70,7 +70,7 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
                         <div>
                             <div class="label-meta">Last night</div>
-                            <div style="margin-top:3px;font-size:var(--fs-title);font-weight:500">@_lastSession.StartedAt.ToLocalTime().ToString("ddd, MMM d")</div>
+                            <div style="margin-top:3px;font-size:var(--fs-title);font-weight:500">@_lastSession.MainDate.ToString("ddd, MMM d")</div>
                         </div>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-ter)" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>
                     </div>
@@ -165,8 +165,8 @@
         Scheduler.ActiveProfileChanged += OnChanged;
     }
 
-    // Existing pre-Phase-9 users already finished the old onboarding (notifications flag set),
-    // so don't drag them back through the new 4-screen flow.
+    // Users who already finished the earlier onboarding (notifications flag set) shouldn't be
+    // dragged back through the newer multi-screen flow.
     private static bool NeedsOnboarding()
         => !Preferences.Get("ldc.onboarding.done", false)
            && !Preferences.Get("ldc.onboarding.notifications.done", false);

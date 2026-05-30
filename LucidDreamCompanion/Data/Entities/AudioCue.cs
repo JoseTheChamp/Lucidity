@@ -20,6 +20,13 @@ public class AudioCue
     public string? VibrationPattern { get; set; }
     public bool Enabled { get; set; } = true;
     public int SortOrder { get; set; }
+
+    /// <summary>
+    /// An alarm rings at high volume until dismissed (WBTB), instead of playing once/looping
+    /// a fixed number of times. Loops continuously with repeating vibration and a full-screen
+    /// dismissible notification.
+    /// </summary>
+    public bool IsAlarm { get; set; }
     public int? CueProfileId { get; set; }
     public CueProfile? CueProfile { get; set; }
 }

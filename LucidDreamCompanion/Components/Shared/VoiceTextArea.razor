@@ -1,0 +1,114 @@
+@implements IDisposable
+@using System.Globalization
+@inject ISpeechToTextService Speech
+@inject IAppSettingsService SettingsService
+
+<div class="voice-field">
+    <textarea class="input-bare voice-field-input"
+              style="min-height:@(MinHeight)px"
+              placeholder="@Placeholder"
+              @bind="_text" @bind:event="oninput" @bind:after="Emit"></textarea>
+    @if (Speech.IsSupported)
+    {
+        <div class="voice-field-foot">
+            <button type="button" class="voice-mic @(_recording ? "recording" : "")"
+                    @onclick="ToggleVoice" aria-label="Dictate">
+                @if (_recording)
+                {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+                }
+                else
+                {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
+                }
+            </button>
+            @if (_recording)
+            {
+                <span class="rec-dot"></span>
+                <span class="voice-label">Listening… tap to stop</span>
+            }
+            else
+            {
+                <span class="voice-label" style="color:var(--text-ter)">Tap the mic to dictate</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "";
+    [Parameter] public int MinHeight { get; set; } = 70;
+
+    private string _text = "";
+    private bool _recording;
+    private string _voiceBase = "";
+    private CancellationTokenSource? _voiceCts;
+
+    protected override void OnParametersSet()
+    {
+        // Don't overwrite text the user is actively dictating.
+        if (!_recording) _text = Value ?? "";
+    }
+
+    private Task Emit() => ValueChanged.InvokeAsync(_text);
+
+    private async Task ToggleVoice()
+    {
+        if (_recording) StopVoice();
+        else await StartVoice();
+    }
+
+    private async Task StartVoice()
+    {
+        if (_recording) return;
+        if (!await Speech.RequestPermissionAsync()) return;
+        _voiceBase = _text ?? "";
+        _recording = true;
+        _voiceCts = new CancellationTokenSource();
+        var locale = await ResolveLocaleAsync();
+        _ = Consume(locale, _voiceCts.Token);
+        StateHasChanged();
+    }
+
+    private void StopVoice()
+    {
+        _voiceCts?.Cancel();
+        _recording = false;
+        StateHasChanged();
+    }
+
+    private async Task Consume(CultureInfo locale, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var transcript in Speech.StreamRecognitionAsync(locale, ct))
+            {
+                var sep = string.IsNullOrWhiteSpace(_voiceBase) ? "" : " ";
+                _text = string.IsNullOrWhiteSpace(transcript) ? _voiceBase : _voiceBase + sep + transcript;
+                await ValueChanged.InvokeAsync(_text);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch
+        {
+            await InvokeAsync(() => { _recording = false; StateHasChanged(); });
+        }
+    }
+
+    private async Task<CultureInfo> ResolveLocaleAsync()
+    {
+        try
+        {
+            var settings = await SettingsService.GetAsync();
+            if (!string.IsNullOrWhiteSpace(settings.SpeechLocale))
+                return CultureInfo.GetCultureInfo(settings.SpeechLocale);
+        }
+        catch { /* fall through to device culture */ }
+        return CultureInfo.CurrentCulture;
+    }
+
+    public void Dispose() => _voiceCts?.Cancel();
+}

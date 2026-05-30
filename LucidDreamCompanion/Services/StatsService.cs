@@ -28,6 +28,63 @@ public class StatsService : IStatsService
         return id;
     }
 
+    public async Task<SleepAverages> GetSleepAveragesAsync(StatsPeriod period, CancellationToken ct = default)
+    {
+        var days = period switch
+        {
+            StatsPeriod.Week => 7,
+            StatsPeriod.Month => 30,
+            StatsPeriod.Quarter => 91,
+            StatsPeriod.Year => 365,
+            _ => 30,
+        };
+        var cutoffUtc = DateTime.UtcNow.AddDays(-days);
+
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var sessions = await db.SleepSessions
+            .AsNoTracking()
+            .Where(s => s.EndedAt != null && s.StartedAt >= cutoffUtc)
+            .Select(s => new { s.StartedAt, EndedAt = s.EndedAt!.Value })
+            .ToListAsync(ct);
+
+        if (sessions.Count == 0)
+            return new SleepAverages(0, null, null, null);
+
+        var starts = sessions.Select(s => TimeOnly.FromDateTime(s.StartedAt.ToLocalTime()));
+        var ends = sessions.Select(s => TimeOnly.FromDateTime(s.EndedAt.ToLocalTime()));
+        var avgTicks = (long)sessions.Average(s => (s.EndedAt - s.StartedAt).Ticks);
+
+        return new SleepAverages(
+            sessions.Count,
+            CircularMeanTime(starts),
+            CircularMeanTime(ends),
+            TimeSpan.FromTicks(avgTicks));
+    }
+
+    /// <summary>
+    /// Averages a set of clock times on the 24h circle, so a cluster straddling midnight
+    /// (e.g. bedtimes of 23:40 and 00:20) averages to 00:00 rather than noon.
+    /// </summary>
+    private static TimeOnly? CircularMeanTime(IEnumerable<TimeOnly> times)
+    {
+        double sumSin = 0, sumCos = 0;
+        var n = 0;
+        foreach (var t in times)
+        {
+            var frac = t.ToTimeSpan().TotalSeconds / 86400.0;
+            var angle = frac * 2 * Math.PI;
+            sumSin += Math.Sin(angle);
+            sumCos += Math.Cos(angle);
+            n++;
+        }
+        if (n == 0) return null;
+        var mean = Math.Atan2(sumSin / n, sumCos / n);
+        if (mean < 0) mean += 2 * Math.PI;
+        var secs = (int)Math.Round(mean / (2 * Math.PI) * 86400) % 86400;
+        if (secs < 0) secs += 86400;
+        return new TimeOnly(secs / 3600, secs % 3600 / 60);
+    }
+
     public async Task<StatsSnapshot> GetSnapshotAsync(CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
@@ -100,24 +157,27 @@ public class StatsService : IStatsService
             trend.Add(new TrendPoint(end, Rate(window)));
         }
 
-        // Technique comparison
+        // Technique comparison — completed nights only, with no-technique nights pooled into one row.
         var sessions = await db.SleepSessions
             .AsNoTracking()
-            .Where(s => s.TechniqueProfileId != null)
+            .Where(s => s.EndedAt != null)
             .Select(s => new { s.Id, s.TechniqueProfileId })
             .ToListAsync(ct);
+        var recordedNights = sessions.Count;
         var profileNames = await db.CueProfiles
             .AsNoTracking()
             .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
 
         var techniqueStats = new List<TechniqueStat>();
-        foreach (var grp in sessions.GroupBy(s => s.TechniqueProfileId!.Value))
+        foreach (var grp in sessions.GroupBy(s => s.TechniqueProfileId))
         {
             var sessionIds = grp.Select(s => s.Id).ToHashSet();
             var linkedDreams = entries
                 .Where(e => e.SleepSessionId.HasValue && sessionIds.Contains(e.SleepSessionId.Value))
                 .ToList();
-            var name = profileNames.TryGetValue(grp.Key, out var n) ? n : "Profile";
+            var name = grp.Key is { } pid
+                ? (profileNames.TryGetValue(pid, out var n) ? n : "Profile")
+                : "No technique";
             techniqueStats.Add(new TechniqueStat(
                 name, grp.Count(), linkedDreams.Count, Rate(linkedDreams)));
         }
@@ -144,7 +204,7 @@ public class StatsService : IStatsService
         return new StatsSnapshot(
             current, longest, total, totalLucid,
             rateAll, rate30, rate90,
-            rcCompleted, rcRate,
+            rcCompleted, rcRate, recordedNights,
             topTags, techniqueStats, heatmap, trend);
     }
 

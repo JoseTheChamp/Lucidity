@@ -31,6 +31,17 @@
             </div>
 
             <div class="field">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <input type="checkbox" id="cueIsAlarm" @bind="_cue.IsAlarm" />
+                    <label for="cueIsAlarm" class="field-label" style="margin:0">Alarm — rings until dismissed</label>
+                </div>
+                @if (_cue.IsAlarm)
+                {
+                    <div style="font-size:11.5px;color:var(--text-ter);margin-top:6px">Loops at full vibration with a dismissible lock-screen alarm. Use for WBTB wake-ups.</div>
+                }
+            </div>
+
+            <div class="field">
                 <span class="field-label">Trigger mode</span>
                 <div style="display:flex;gap:6px">
                     <button class="seg @(_cue.TriggerMode == CueTriggerMode.ClockBased ? "active" : "")"
@@ -109,15 +120,18 @@
                 <input type="range" min="0" max="100" step="5" @bind="_cue.VolumePercent" @bind:event="oninput" style="width:100%" />
             </div>
 
-            <div class="field">
-                <span class="field-label">Fade-in · @_cue.FadeInSeconds s</span>
-                <input type="range" min="0" max="30" step="1" @bind="_cue.FadeInSeconds" @bind:event="oninput" style="width:100%" />
-            </div>
+            @if (!_cue.IsAlarm)
+            {
+                <div class="field">
+                    <span class="field-label">Fade-in · @_cue.FadeInSeconds s</span>
+                    <input type="range" min="0" max="30" step="1" @bind="_cue.FadeInSeconds" @bind:event="oninput" style="width:100%" />
+                </div>
 
-            <div class="field">
-                <span class="field-label">Loop count</span>
-                <input type="number" min="1" max="100" class="input" style="width:100px" @bind="_cue.LoopCount" />
-            </div>
+                <div class="field">
+                    <span class="field-label">Loop count</span>
+                    <input type="number" min="1" max="100" class="input" style="width:100px" @bind="_cue.LoopCount" />
+                </div>
+            }
 
             <div class="field">
                 <span class="field-label">Vibration</span>

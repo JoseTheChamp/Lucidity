@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="456" height="456" viewBox="0 0 456 456" version="1.1" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="0" width="456" height="456" fill="#512BD4" />
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Void background — near-pure black, per the brand "Void" option -->
+  <rect width="512" height="512" fill="#080B14" />
+  <!-- Ambient stars -->
+  <circle cx="86"  cy="118" r="2.6" fill="#E8ECF4" opacity="0.80" />
+  <circle cx="436" cy="138" r="1.8" fill="#A78BFA" opacity="0.80" />
+  <circle cx="74"  cy="386" r="1.6" fill="#E8ECF4" opacity="0.70" />
+  <circle cx="430" cy="402" r="2.2" fill="#6B8AFF" opacity="0.80" />
+  <circle cx="160" cy="92"  r="1.4" fill="#E8ECF4" opacity="0.65" />
+  <circle cx="356" cy="84"  r="1.6" fill="#E8ECF4" opacity="0.70" />
+  <circle cx="138" cy="420" r="1.6" fill="#A78BFA" opacity="0.70" />
+  <circle cx="372" cy="430" r="1.1" fill="#E8ECF4" opacity="0.60" />
+  <circle cx="246" cy="72"  r="1.2" fill="#E8ECF4" opacity="0.55" />
+  <circle cx="60"  cy="252" r="1.3" fill="#6B8AFF" opacity="0.60" />
 </svg>

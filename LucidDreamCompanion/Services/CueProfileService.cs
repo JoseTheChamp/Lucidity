@@ -79,6 +79,7 @@ public class CueProfileService : ICueProfileService
                 FadeInSeconds = c.FadeInSeconds,
                 LoopCount = c.LoopCount,
                 VibrationPattern = c.VibrationPattern,
+                IsAlarm = c.IsAlarm,
                 Enabled = c.Enabled,
                 SortOrder = c.SortOrder,
             }).ToList(),
@@ -121,25 +122,42 @@ public class CueProfileService : ICueProfileService
             .FirstOrDefaultAsync(c => c.Id == cueId, ct);
     }
 
-    public async Task<AudioCue> AddCueAsync(int profileId, CancellationToken ct = default)
+    public async Task<AudioCue> AddCueAsync(int profileId, bool isAlarm = false, CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
         var firstAsset = await db.AudioAssets.OrderBy(a => a.Id).FirstOrDefaultAsync(ct);
         var maxOrder = await db.AudioCues.Where(c => c.CueProfileId == profileId)
             .Select(c => (int?)c.SortOrder).MaxAsync(ct) ?? -1;
-        var cue = new AudioCue
-        {
-            CueProfileId = profileId,
-            Label = "New cue",
-            TriggerMode = CueTriggerMode.ClockBased,
-            ClockTime = new TimeOnly(3, 0),
-            AudioAssetId = firstAsset?.Id ?? 0,
-            VolumePercent = 40,
-            FadeInSeconds = 5,
-            LoopCount = 1,
-            Enabled = true,
-            SortOrder = maxOrder + 1,
-        };
+        var cue = isAlarm
+            ? new AudioCue
+            {
+                CueProfileId = profileId,
+                Label = "WBTB alarm",
+                // WBTB wakes you ~5 h after sleep start.
+                TriggerMode = CueTriggerMode.SleepRelative,
+                OffsetFromSleepStart = new TimeSpan(5, 0, 0),
+                AudioAssetId = firstAsset?.Id ?? 0,
+                VolumePercent = 80,
+                FadeInSeconds = 0,
+                LoopCount = 1,
+                VibrationPattern = "0,800,400,800",
+                IsAlarm = true,
+                Enabled = true,
+                SortOrder = maxOrder + 1,
+            }
+            : new AudioCue
+            {
+                CueProfileId = profileId,
+                Label = "New cue",
+                TriggerMode = CueTriggerMode.ClockBased,
+                ClockTime = new TimeOnly(3, 0),
+                AudioAssetId = firstAsset?.Id ?? 0,
+                VolumePercent = 40,
+                FadeInSeconds = 5,
+                LoopCount = 1,
+                Enabled = true,
+                SortOrder = maxOrder + 1,
+            };
         db.AudioCues.Add(cue);
         await db.SaveChangesAsync(ct);
         Changed?.Invoke();
@@ -163,6 +181,7 @@ public class CueProfileService : ICueProfileService
         tracked.FadeInSeconds = cue.FadeInSeconds;
         tracked.LoopCount = cue.LoopCount;
         tracked.VibrationPattern = cue.VibrationPattern;
+        tracked.IsAlarm = cue.IsAlarm;
         tracked.Enabled = cue.Enabled;
         await db.SaveChangesAsync(ct);
         Changed?.Invoke();

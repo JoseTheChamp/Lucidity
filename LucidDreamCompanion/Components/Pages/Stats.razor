@@ -40,20 +40,59 @@
 
             <!-- Big numbers -->
             <div class="card">
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+                    <div>
+                        <div class="label-meta">Nights</div>
+                        <div class="mono tabular" style="font-size:22px;margin-top:4px;color:var(--accent)">@_snapshot.RecordedNights</div>
+                    </div>
                     <div>
                         <div class="label-meta">Dreams</div>
-                        <div class="mono tabular" style="font-size:24px;margin-top:4px">@_snapshot.TotalEntries</div>
+                        <div class="mono tabular" style="font-size:22px;margin-top:4px">@_snapshot.TotalEntries</div>
                     </div>
                     <div>
                         <div class="label-meta">Lucid</div>
-                        <div class="mono tabular" style="font-size:24px;margin-top:4px;color:var(--lucid)">@_snapshot.TotalLucid</div>
+                        <div class="mono tabular" style="font-size:22px;margin-top:4px;color:var(--lucid)">@_snapshot.TotalLucid</div>
                     </div>
                     <div>
                         <div class="label-meta">Lucidity</div>
-                        <div class="mono tabular" style="font-size:24px;margin-top:4px">@Pct(_snapshot.LucidityRate)</div>
+                        <div class="mono tabular" style="font-size:22px;margin-top:4px">@Pct(_snapshot.LucidityRate)</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Sleep rhythm -->
+            <div class="card">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                    <div class="label-meta">Sleep rhythm</div>
+                    <div class="period-toggle">
+                        @foreach (var p in PeriodOptions)
+                        {
+                            <button class="@(_period == p ? "active" : "")" @onclick="() => SetPeriod(p)">@PeriodLabel(p)</button>
+                        }
+                    </div>
+                </div>
+                @if (_averages is null || _averages.SessionCount == 0)
+                {
+                    <div style="font-size:13px;color:var(--text-ter)">No completed sleep sessions in this period yet.</div>
+                }
+                else
+                {
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                        <div>
+                            <div class="label-meta">Avg. bedtime</div>
+                            <div class="mono tabular" style="font-size:20px;margin-top:4px">@TimeText(_averages.AvgBedtime)</div>
+                        </div>
+                        <div>
+                            <div class="label-meta">Avg. wake</div>
+                            <div class="mono tabular" style="font-size:20px;margin-top:4px">@TimeText(_averages.AvgWakeTime)</div>
+                        </div>
+                        <div>
+                            <div class="label-meta">Avg. sleep</div>
+                            <div class="mono tabular" style="font-size:20px;margin-top:4px;color:var(--accent)">@DurationText(_averages.AvgDuration)</div>
+                        </div>
+                    </div>
+                    <div class="label-meta" style="margin-top:10px">@_averages.SessionCount session@(_averages.SessionCount == 1 ? "" : "s")</div>
+                }
             </div>
 
             <!-- Heatmap -->
@@ -186,6 +225,27 @@
 </div>
 
 <style>
+.period-toggle {
+    display: flex;
+    gap: 4px;
+}
+.period-toggle button {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 9px;
+    color: var(--text-ter);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.period-toggle button.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+}
 .heatmap {
     display: grid;
     grid-auto-flow: column;
@@ -241,6 +301,11 @@
     private StatsSnapshot? _snapshot;
     private int _leadingBlanks;
 
+    private static readonly StatsPeriod[] PeriodOptions =
+        { StatsPeriod.Week, StatsPeriod.Month, StatsPeriod.Quarter, StatsPeriod.Year };
+    private StatsPeriod _period = StatsPeriod.Month;
+    private SleepAverages? _averages;
+
     protected override async Task OnInitializedAsync()
     {
         _snapshot = await StatsSvc.GetSnapshotAsync();
@@ -249,6 +314,30 @@
             // Sunday=0 … align the first cell into its weekday row.
             _leadingBlanks = (int)_snapshot.Heatmap[0].Date.DayOfWeek;
         }
+        _averages = await StatsSvc.GetSleepAveragesAsync(_period);
+    }
+
+    private async Task SetPeriod(StatsPeriod p)
+    {
+        _period = p;
+        _averages = await StatsSvc.GetSleepAveragesAsync(_period);
+    }
+
+    private static string PeriodLabel(StatsPeriod p) => p switch
+    {
+        StatsPeriod.Week => "Week",
+        StatsPeriod.Month => "Month",
+        StatsPeriod.Quarter => "Quarter",
+        StatsPeriod.Year => "Year",
+        _ => p.ToString(),
+    };
+
+    private static string TimeText(TimeOnly? t) => t is { } v ? v.ToString("HH:mm") : "—";
+
+    private static string DurationText(TimeSpan? d)
+    {
+        if (d is not { } v) return "—";
+        return $"{(int)v.TotalHours}h {v.Minutes:D2}m";
     }
 
     private static string Pct(double rate) => $"{Math.Round(rate * 100)}%";
