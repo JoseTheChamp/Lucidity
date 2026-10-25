@@ -124,3 +124,7 @@ LuciditySpec.md         # Full implementation spec (data model, phases, acceptan
 ## Status
 
 All 9 planned phases are implemented (journal, notifications and reality checks, audio library, cue scheduling, sleep sessions, voice journaling, technique templates, stats, export and polish). It's a personal project at version 0.1 and isn't published on Google Play. Build it yourself and sideload it.
+
+## License
+
+[MIT](LICENSE)
