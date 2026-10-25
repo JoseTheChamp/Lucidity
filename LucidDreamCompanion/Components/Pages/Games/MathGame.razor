@@ -137,11 +137,15 @@
     private int CurrentMax => 8 + _rangeBoosts * 2;
     private int CurrentTimeMs => Math.Max(2500, 12000 - _speedBoosts * 600);
 
-    private int _timerMs;
-    private double TimerPct => Math.Clamp(_timerMs * 100.0 / Math.Max(1, CurrentTimeMs), 0, 100);
-    private string TimerColor => _timerMs > CurrentTimeMs * 0.4
+    // Wall-clock timer — avoids any race between the old timer-task winding down and a new problem
+    // resetting state, which caused the bar to flicker back to full mid-tick.
+    private long _problemStartedMs;
+    private int _problemTotalMs;
+    private int RemainingMs => System.Math.Max(0, _problemTotalMs - (int)(Environment.TickCount64 - _problemStartedMs));
+    private double TimerPct => System.Math.Clamp(RemainingMs * 100.0 / System.Math.Max(1, _problemTotalMs), 0, 100);
+    private string TimerColor => RemainingMs > _problemTotalMs * 0.4
         ? "var(--accent)"
-        : _timerMs > CurrentTimeMs * 0.15 ? "#fbbf24" : "var(--warn)";
+        : RemainingMs > _problemTotalMs * 0.15 ? "#fbbf24" : "var(--warn)";
 
     private CancellationTokenSource? _cts;
     private readonly Random _rng = new();
@@ -195,7 +199,8 @@
     {
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
-        _timerMs = CurrentTimeMs;
+        _problemTotalMs = CurrentTimeMs;
+        _problemStartedMs = Environment.TickCount64;
         _ = RunTimer(_cts.Token);
     }
 
@@ -206,8 +211,7 @@
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(50));
             while (await timer.WaitForNextTickAsync(ct))
             {
-                _timerMs -= 50;
-                if (_timerMs <= 0)
+                if (RemainingMs <= 0)
                 {
                     await InvokeAsync(Timeout);
                     return;

@@ -29,6 +29,12 @@ public interface ICueSchedulerService
     /// <summary>Stops the currently-ringing alarm (user dismissed it).</summary>
     Task StopAlarmAsync();
 
+    /// <summary>True while a WBTB alarm is actively ringing.</summary>
+    bool IsAlarmRinging { get; }
+
+    /// <summary>Raised when an alarm starts or stops ringing — UI can show/hide an in-app Dismiss button.</summary>
+    event Action? AlarmStateChanged;
+
     // ─── Private-mode reality checks: play a sound instead of showing a notification ───
     Task ScheduleRealityCheckAudioAsync(IReadOnlyList<DateTime> localTimes, int audioAssetId, int volumePercent);
     Task CancelRealityCheckAudioAsync();

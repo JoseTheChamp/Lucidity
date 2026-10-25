@@ -30,6 +30,9 @@ public class CueSchedulerService : ICueSchedulerService
     // Handle of the alarm currently ringing-until-dismissed, if any.
     private int _activeAlarmHandle;
 
+    public bool IsAlarmRinging => _activeAlarmHandle > 0;
+    public event Action? AlarmStateChanged;
+
     public event Action? ActiveProfileChanged;
 
     public CueSchedulerService(
@@ -276,6 +279,7 @@ public class CueSchedulerService : ICueSchedulerService
             log.Status = CueLogStatus.Fired;
             log.FiredAt = DateTime.UtcNow;
             _logger.LogInformation("Alarm '{Label}' ringing (log {Id}, handle {H})", log.CueLabel, logId, handle);
+            AlarmStateChanged?.Invoke();
         }
         else
         {
@@ -293,7 +297,11 @@ public class CueSchedulerService : ICueSchedulerService
             await _audio.StopAsync(handle);
         else
             await _audio.StopAllAsync();
+        // Tear down the alarm foreground service so its full-screen notification disappears too.
+        // If more cues are still armed in AlarmManager they'll re-start the service when they fire.
+        PlatformStopMonitor();
         _logger.LogInformation("Alarm dismissed (handle {H})", handle);
+        AlarmStateChanged?.Invoke();
     }
 
     public async Task ScheduleRealityCheckAudioAsync(IReadOnlyList<DateTime> localTimes, int audioAssetId, int volumePercent)
