@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Lucid Dream Companion is a **.NET MAUI Blazor Hybrid** app (single project, `LucidDreamCompanion/`) for dream journaling, lucidity training, and running overnight audio cues. UI is Blazor/Razor inside a `BlazorWebView`; platform integration (alarms, audio, speech) is native Android. The phased build history and detailed design rationale live in [README.md](README.md) and [LuciditySpec.md](LuciditySpec.md) — the spec is the source of truth when it disagrees with the design handoff.
+Lucid Dream Companion is a **.NET MAUI Blazor Hybrid** app (single project, `LucidDreamCompanion/`) for dream journaling, lucidity training, and running overnight audio cues. UI is Blazor/Razor inside a `BlazorWebView`; platform integration (alarms, audio, speech) is native Android. The phased build history and detailed design rationale live in [docs/DEVELOPMENT_NOTES.md](docs/DEVELOPMENT_NOTES.md) and [LuciditySpec.md](LuciditySpec.md) — the spec is the source of truth when it disagrees with the design handoff.
 
 ## Build & run
 

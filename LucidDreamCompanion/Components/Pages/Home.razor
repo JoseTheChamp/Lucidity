@@ -223,7 +223,7 @@
     {
         var h = DateTime.Now.Hour;
         var part = h < 12 ? "morning" : h < 18 ? "afternoon" : "evening";
-        return $"Good {part}, Josef";
+        return $"Good {part}";
     }
 
     private static string Pct(double rate) => $"{Math.Round(rate * 100)}%";

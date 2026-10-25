@@ -23,7 +23,7 @@ function HomeScreen({ onNav, onStartSleep, onNewEntry, sessionActive }) {
 }
 
 function HomeHeader() {
-  const greeting = "Good morning, Josef";
+  const greeting = "Good morning";
   return (
     <div style={{ padding: "18px var(--pad-x) 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div>

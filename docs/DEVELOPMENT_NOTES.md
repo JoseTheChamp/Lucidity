@@ -1,6 +1,6 @@
-# Lucid Dream Companion
+# Development notes
 
-A .NET MAUI Blazor Hybrid app for journaling dreams, training lucidity, and running overnight audio cues. Implements the phased plan in [LuciditySpec.md](LuciditySpec.md).
+Phase-by-phase implementation notes for Lucid Dream Companion, following the plan in [LuciditySpec.md](../LuciditySpec.md). For what the app does and how to build it, see the [README](../README.md).
 
 ## Status
 
@@ -56,7 +56,7 @@ Lifted verbatim from the Claude Design handoff (`design/lucidity/project/tokens.
 
 ## Phase 3 — Notes
 
-- **Bundled audio** is *generated* at build/setup time by `Resources/Raw/Audio/_generate.ps1` (22 kHz 16-bit PCM mono WAVs — no third-party samples required). Filenames: `bell-soft.wav`, `bell-tibetan.wav`, `voice-are-you-dreaming.wav` (a 2-bell placeholder until a real recording is supplied), `pink-noise.wav`, `brown-noise.wav`, `binaural-theta.wav`. See [Resources/Raw/Audio/CREDITS.md](LucidDreamCompanion/Resources/Raw/Audio/CREDITS.md). The PS1 + CREDITS are explicitly excluded from `MauiAsset` so they don't ship in the APK.
+- **Bundled audio** is *generated* at build/setup time by `Resources/Raw/Audio/_generate.ps1` (22 kHz 16-bit PCM mono WAVs — no third-party samples required). Filenames: `bell-soft.wav`, `bell-tibetan.wav`, `voice-are-you-dreaming.wav` (a 2-bell placeholder until a real recording is supplied), `pink-noise.wav`, `brown-noise.wav`, `binaural-theta.wav`. See [Resources/Raw/Audio/CREDITS.md](../LucidDreamCompanion/Resources/Raw/Audio/CREDITS.md). The PS1 + CREDITS are explicitly excluded from `MauiAsset` so they don't ship in the APK.
 - **Playback** on Android uses `Android.Media.MediaPlayer` with `AudioAttributes.USAGE_ALARM` (so DnD doesn't mute cues), an `AudioFocusRequest`, smooth fade-in via volume stepping, loop counts, and CSV vibration patterns through `VibratorManager`/`Vibrator`.
 - `IAudioService` API matches spec §3: `PlayAsync` returns a handle, `StopAsync(handle)` / `StopAllAsync`, `ImportFileAsync` via `FilePicker.Default`, `RecordAsync` / `StopRecordingAsync` via `MediaRecorder` (AAC/M4A into `AppDataDirectory/audio/recordings/`), `PlaybackFinished` event.
 - **Permissions** added to `AndroidManifest.xml`: `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`.
@@ -88,7 +88,7 @@ Lifted verbatim from the Claude Design handoff (`design/lucidity/project/tokens.
 - **Speech-to-text is native** (`android.speech.SpeechRecognizer`), not CommunityToolkit.Maui — the CT.Maui package wants a newer MAUI runtime than the installed 10.0.1 workload, and native gives full control over continuous recognition. `SpeechToTextService` is a `partial class` (Android impl in `Platforms/Android/Services/AndroidSpeechToText.cs`); non-Android targets get a no-op.
 - **Continuous recognition**: `SpeechRecognizer` ends each utterance on a pause, so `ContinuousListener` re-arms it after every result/error to keep listening through the whole recall. `StreamRecognitionAsync` yields the *cumulative* transcript (via a `Channel<string>`); the editor appends it after the pre-recording text.
 - **Editor mic**: big circular mic button under the body field — tap to start/stop. While recording: pulsing-ring button, blinking red dot, animated CSS waveform. Live transcript appends per-utterance. If permission is denied or no recognizer exists, the button hides and a hint shows.
-- **Locale**: `AppSettings.SpeechLocale` (new column) — `/settings/voice` lets Josef pick English / Czech or device default. Empty = device culture.
+- **Locale**: `AppSettings.SpeechLocale` (new column) — `/settings/voice` lets the user pick English / Czech or device default. Empty = device culture.
 - **Lock-screen quick capture**: ending a sleep session posts a low-priority "Log your dream" notification (`NotificationService.ShowDreamCaptureAsync`). Tapping it creates an entry and opens the editor with `?mic=1`, which auto-starts dictation. The notification is cancelled on tap.
 - Manifest: added a `<queries>` entry for `android.speech.RecognitionService` so the recognizer is visible on Android 11+.
 
