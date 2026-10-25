@@ -6,6 +6,19 @@ Built with **.NET MAUI Blazor Hybrid** (.NET 10, C#, Razor, SQLite). Android is 
 
 > Think "power-user journal", not "breathe in, breathe out". It's a training tool, not a meditation app.
 
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/home.jpg" width="260" alt="Home: journaling streak, last night's dreams, active cue profile and quick actions"></td>
+    <td align="center"><img src="docs/images/sleep-session.jpg" width="260" alt="Active sleep session: elapsed time, next cue countdown and the night's cue timeline"></td>
+    <td align="center"><img src="docs/images/journal-editor.jpg" width="260" alt="Dream editor: text or voice dictation, lucidity level, sleep quality and date"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Home</b><br>Streak, last night, quick start</td>
+    <td align="center"><b>Sleep session</b><br>Cues fire while you sleep</td>
+    <td align="center"><b>Dream editor</b><br>Type or dictate, rate lucidity</td>
+  </tr>
+</table>
+
 ---
 
 ## What it's for
@@ -17,6 +30,21 @@ Most lucid-dreaming techniques (WBTB, MILD, FILD, WILD, SSILD) depend on three h
 3. **Being nudged at the right moment of the night**, e.g. a soft bell or a voice cue during late-night REM, or an alarm for Wake-Back-To-Bed.
 
 Lucidity covers all three. Your phone schedules the cues reliably overnight (exact Android alarms, survives Doze and reboots), and everything you log feeds into streaks and lucidity stats.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/sleep.jpg" width="260" alt="Sleep tab: pick a cue profile, set an optional aim for the night, Start Sleep"></td>
+    <td align="center"><img src="docs/images/stats.jpg" width="260" alt="Stats: streak, nights, dreams, lucidity rate, sleep rhythm and 90-night heatmap"></td>
+    <td align="center"><img src="docs/images/settings.jpg" width="260" alt="Settings: tags, notifications, voice journaling language, data and backup"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Tonight</b><br>Pick a cue profile, press Start Sleep</td>
+    <td align="center"><b>Stats</b><br>Streaks, lucidity rate, sleep rhythm</td>
+    <td align="center"><b>Settings</b><br>Tags, reminders, voice, backups</td>
+  </tr>
+</table>
 
 ## Features
 
@@ -50,6 +78,7 @@ Lucidity covers all three. Your phone schedules the cues reliably overnight (exa
 **Stats and streaks**
 - Current and longest journaling streak, with milestone celebrations
 - Lucidity rate (30 days, 90 days, all time), 90-day calendar heatmap, trend line
+- Sleep rhythm: average bedtime, wake-up time and sleep length per week, month, quarter or year
 - Top tags, technique comparison (which profile produces the most lucid dreams), reality-check completion
 
 **Your data stays yours**
@@ -110,7 +139,7 @@ LucidDreamCompanion/
 ├── Resources/Raw/Audio # Bundled WAV cues (synthesised by _generate.ps1, see CREDITS.md)
 └── wwwroot/            # CSS design tokens, app styles, JS interop
 design/lucidity/        # Original HTML/JSX design prototype the UI is based on
-docs/                   # Development notes
+docs/                   # Development notes, README screenshots
 LuciditySpec.md         # Full implementation spec (data model, phases, acceptance criteria)
 ```
 
